@@ -1,0 +1,48 @@
+name: infra-plan
+
+# PR que mexe na infra → `terragrunt plan` com role SOMENTE LEITURA, resultado no resumo do job.
+# Revisem o plan antes do merge; o apply acontece no deploy (main).
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - "observability/**"
+      - ".github/workflows/infra-plan.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    # PR de fork não recebe token OIDC; e antes do bootstrap a variável não existe
+    if: vars.AWS_PLAN_ROLE_ARN != '' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      BUDGET_EMAILS: ${{ vars.BUDGET_EMAILS }}
+      API_ALLOWED_CIDRS: ${{ vars.API_ALLOWED_CIDRS || '0.0.0.0/0' }}
+      IMAGE_TAG: ${{ github.event.pull_request.head.sha }}
+      TG_NON_INTERACTIVE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-infra
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - name: plan (sem lock, porque a role não escreve no state)
+        working-directory: infra/live/aws
+        run: |
+          set -o pipefail
+          terragrunt run --all -- plan -lock=false -no-color 2>&1 | tee plan.txt
+      - name: Resumo
+        if: always()
+        working-directory: infra/live/aws
+        run: |
+          {
+            echo "### terragrunt plan"
+            echo '```'
+            grep -E "Plan:|No changes|Error|will be (created|destroyed|updated)|must be replaced" plan.txt | head -100 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

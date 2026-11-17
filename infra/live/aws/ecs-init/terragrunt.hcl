@@ -1,4 +1,4 @@
-# Tasks one-off que preparam o ambiente (rodadas pelo infra/scripts/aws.sh antes dos serviços):
+# Tasks one-off que preparam o ambiente (rodadas por infra/scripts/run-init-tasks.sh no workflow release):
 #   db-init       → cria 1 database + 1 usuário por serviço no RDS (ADR-003)
 #   rabbitmq-init → aplica rabbitmq/definitions.json no Amazon MQ (ADR-002)
 

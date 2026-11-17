@@ -1,0 +1,53 @@
+name: infra-up
+
+# Manual: cria TODA a infra do zero (~25 min) e faz o primeiro release.
+# Pré-requisito: `make aws-bootstrap` já rodado (orçamento + OIDC).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: aws-infra
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    environment: aws
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      BUDGET_EMAILS: ${{ vars.BUDGET_EMAILS }}
+      API_ALLOWED_CIDRS: ${{ vars.API_ALLOWED_CIDRS || '0.0.0.0/0' }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      TG_NON_INTERACTIVE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-infra
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - name: Rede, S3, segredos, RDS, Amazon MQ, ECR, cluster
+        working-directory: infra/live/aws
+        run: |
+          terragrunt run --all --backend-bootstrap \
+            --filter '!./github-oidc' --filter '!./ecs-init' --filter '!./ecs-services' --filter '!./datadog' \
+            apply
+
+  images:
+    needs: base
+    uses: ./.github/workflows/build-images.yml
+    with:
+      tag: ${{ github.sha }}
+    secrets: inherit
+
+  release:
+    needs: images
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ github.sha }}
+    secrets: inherit

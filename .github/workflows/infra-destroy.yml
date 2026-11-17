@@ -1,0 +1,42 @@
+name: infra-destroy
+
+# Manual: destrói toda a infra (mantém state, alerta de orçamento e OIDC).
+# Actions → infra-destroy → Run workflow → digite "destruir".
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacao:
+        description: 'Digite "destruir" para confirmar'
+        required: true
+
+concurrency:
+  group: aws-infra
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    if: inputs.confirmacao == 'destruir'
+    runs-on: ubuntu-latest
+    environment: aws
+    timeout-minutes: 60
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+      DD_HOST: https://api.${{ vars.DD_SITE || 'datadoghq.com' }}
+      TG_NON_INTERACTIVE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-infra
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - name: Destroy
+        working-directory: infra/live/aws
+        run: terragrunt run --all --filter '!./budget' --filter '!./github-oidc' destroy
+      - run: echo "Infra destruída. Pushes na main não recriam nada; para subir de novo, rode infra-up." >> "$GITHUB_STEP_SUMMARY"

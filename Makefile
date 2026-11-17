@@ -42,16 +42,29 @@ test: ## valida infra: fmt, validate e testes dos módulos Terraform, HCL do Ter
 	docker compose --env-file .env.example --profile apps config -q
 
 # ---------- AWS ----------
-aws-up: ## cria TUDO na AWS (precisa BUDGET_EMAILS=...)
-	infra/scripts/aws.sh up
+# O caminho oficial é o GitHub Actions (infra-up / deploy / infra-destroy).
+# Estes alvos usam o atalho local infra/scripts/aws.sh (não versionado; só quem opera a infra tem).
+AWS_SH := infra/scripts/aws.sh
+aws-check = @test -x $(AWS_SH) || { echo "$(AWS_SH) é local e não está neste clone. Use os workflows do GitHub Actions (veja infra/README.md)."; exit 1; }
 
-aws-down: ## destrói TUDO na AWS (rodar depois da apresentação!)
-	infra/scripts/aws.sh down
+aws-bootstrap: ## [local] UMA vez, com admin: orçamento + OIDC (BUDGET_EMAILS=... GITHUB_REPOSITORY=owner/repo)
+	$(aws-check)
+	$(AWS_SH) bootstrap
 
-aws-status: ## URL da API e réplicas rodando na AWS
-	infra/scripts/aws.sh status
+aws-up: ## [local] cria tudo na AWS sem passar pelo CI
+	$(aws-check)
+	$(AWS_SH) up
 
-aws-deploy: ## rebuild das imagens e redeploy dos serviços na AWS
-	infra/scripts/aws.sh images
+aws-deploy: ## [local] rebuild das imagens + release
+	$(aws-check)
+	$(AWS_SH) deploy
 
-.PHONY: help env infra up ps logs down reset test aws-up aws-down aws-status aws-deploy
+aws-status: ## [local] URL da API e réplicas
+	$(aws-check)
+	$(AWS_SH) status
+
+aws-down: ## [local] destrói tudo na AWS
+	$(aws-check)
+	$(AWS_SH) down
+
+.PHONY: help env infra up ps logs down reset test aws-bootstrap aws-up aws-down aws-status aws-deploy

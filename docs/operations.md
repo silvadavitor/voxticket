@@ -4,7 +4,7 @@
 
 | | local | aws |
 |---|---|---|
-| Infra | `make up` (o `infra-init` roda Terragrunt em `infra/live/ministack`) | `make aws-up` / `make aws-down` |
+| Infra | `make up` (o `infra-init` roda Terragrunt em `infra/live/ministack`) | GitHub Actions: `infra-up` / `deploy` / `infra-destroy` |
 | Serviços | containers do compose | ECS Fargate (imagens no ECR) |
 | Broker | container RabbitMQ | Amazon MQ |
 | Banco | 1 container Postgres por serviço | RDS (database + usuário por serviço) |

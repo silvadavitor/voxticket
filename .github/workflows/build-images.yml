@@ -1,0 +1,63 @@
+name: build-images
+
+# Reutilizável: build com cache de camadas e push no ECR, tag imutável = SHA do commit.
+# Só serviços que já têm Dockerfile + as imagens de init.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          {
+            for d in services/*/; do
+              name=$(basename "$d")
+              if [ -f "${d}Dockerfile" ]; then
+                jq -cn --arg n "$name" --arg c "$d" '{name:$n, context:$c, file:($c+"Dockerfile")}'
+              fi
+            done
+            jq -cn '{name:"db-init", context:".", file:"infra/docker/db-init.Dockerfile"}'
+            jq -cn '{name:"rabbitmq-init", context:".", file:"infra/docker/rabbitmq-init.Dockerfile"}'
+          } | jq -cs '{include: .}' > matrix.json
+          cat matrix.json
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: discover
+    runs-on: ubuntu-latest
+    environment: aws
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/voxticket/${{ matrix.name }}:${{ inputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

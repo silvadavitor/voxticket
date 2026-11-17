@@ -36,9 +36,7 @@ make f5          # roda o cenário de falha F5 (vale f1…f8)
 make test        # testes da infraestrutura
 make reset       # derruba e apaga os dados locais
 
-BUDGET_EMAILS=voce@exemplo.com make aws-up   # cria TUDO na AWS (~25 min)
-make aws-status                               # URL da API e réplicas
-make aws-down                                 # destrói TUDO na AWS
+# AWS: pelo GitHub Actions → workflows infra-up, deploy (automático) e infra-destroy
 ```
 
 ## Mapa do repositório
@@ -52,7 +50,7 @@ make aws-down                                 # destrói TUDO na AWS
 ├── infra/                    # Terraform (modules/) + Terragrunt (live/ministack, live/aws)
 ├── observability/            # OpenTelemetry Collector → Datadog (ou Jaeger como reserva)
 ├── scripts/failures/         # um script por cenário F1–F8 + consultas SQL de verificação
-├── .github/workflows/ci.yml  # CI: testes da infra, scan de segurança, build das imagens
+├── .github/workflows/        # ci, infra-plan, deploy, infra-up, infra-destroy (OIDC)
 ├── Makefile                  # atalhos (make help)
 └── docker-compose.yml        # sobe tudo localmente
 ```
@@ -179,16 +177,17 @@ docker compose --profile apps down -v     # para tudo e APAGA bancos, filas e S3
 
 ## Deploy na AWS (entrega final)
 
-Mesmo código e mesmos módulos Terraform, mas em outro ambiente Terragrunt. Um comando sobe, outro destrói:
+Pelo **GitHub Actions com OIDC**, sem nenhuma chave da AWS no repositório:
 
-```bash
-aws sso login                                  # ou export AWS_PROFILE=...
-BUDGET_EMAILS=voce@exemplo.com make aws-up     # orçamento → base → imagens → init → serviços
-make aws-status                                # mostra a URL da API
-make aws-down                                  # depois da apresentação: destrói tudo
-```
+| Ação | Como |
+|---|---|
+| Criar tudo do zero | Actions → **infra-up** → Run workflow |
+| Atualizar | merge na `main`: build das imagens, push no ECR e atualização do ECS, sozinho |
+| Ver o que muda na infra | abra um PR: o **infra-plan** mostra o `terragrunt plan` |
+| Destruir tudo | Actions → **infra-destroy** → digite `destruir` |
 
-Detalhes, custo e o que cada passo faz: [infra/README.md](infra/README.md).
+Um push com a infra destruída **não recria nada**; criar é sempre manual. A configuração inicial
+(OIDC, variáveis do GitHub) e o passo a passo manual sem CI estão em [infra/README.md](infra/README.md).
 
 ## Requisitos do enunciado: onde estão
 

@@ -1,5 +1,5 @@
 # Microsserviços + otel-collector no ECS Fargate.
-# Imagens: <ecr>/voxticket/<servico>:${IMAGE_TAG} (infra/scripts/aws.sh images).
+# Imagens: <ecr>/voxticket/<servico>:${IMAGE_TAG} (workflow build-images).
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")
@@ -14,6 +14,9 @@ locals {
   tag            = get_env("IMAGE_TAG", "latest")
   datadog        = get_env("DD_API_KEY", "") != ""
   otel_namespace = "voxticket.internal"
+
+  # Só sobe serviço que já tem imagem (o workflow release passa os que têm Dockerfile). Vazio = todos.
+  deploy_only = compact(split(",", get_env("DEPLOY_SERVICES", "")))
 
   # O que é específico de cada serviço. s3_access: none | read | readwrite (menor privilégio).
   catalog = {
@@ -184,7 +187,7 @@ inputs = {
           BROKER_QUEUE = "${svc}.q"
           DB_SECRET_ID = dependency.secrets.outputs.db_secret_names[svc]
         })
-      }
+      } if length(local.deploy_only) == 0 || contains(local.deploy_only, svc)
     },
     # OTel Collector como serviço próprio (Cloud Map: otel-collector.voxticket.internal), só com Datadog
     local.datadog ? {

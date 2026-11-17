@@ -1,0 +1,61 @@
+name: deploy
+
+# Push na main → se a infra EXISTE na AWS: build/push das imagens (tag = SHA) e release.
+# Se a infra está destruída, só avisa e não cria nada (push nunca gera custo; criar é só no infra-up).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "infra/**"
+      - "rabbitmq/**"
+      - "observability/**"
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+concurrency:
+  group: aws-infra # um apply/destroy por vez (state)
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  check:
+    if: vars.AWS_PLAN_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    outputs:
+      infra_up: ${{ steps.check.outputs.infra_up }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }} # somente leitura, sem aprovação
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - id: check
+        run: |
+          status=$(aws ecs describe-clusters --clusters voxticket-aws --query 'clusters[0].status' --output text 2>/dev/null || true)
+          if [ "$status" = "ACTIVE" ]; then
+            echo "infra_up=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra_up=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Infra AWS não está no ar: nada a fazer. Para criar, rode o workflow infra-up."
+          fi
+
+  images:
+    needs: check
+    if: needs.check.outputs.infra_up == 'true'
+    uses: ./.github/workflows/build-images.yml
+    with:
+      tag: ${{ github.sha }}
+    secrets: inherit
+
+  release:
+    needs: [check, images]
+    if: needs.check.outputs.infra_up == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ github.sha }}
+    secrets: inherit

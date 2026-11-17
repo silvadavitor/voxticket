@@ -1,0 +1,27 @@
+name: setup-infra
+description: Credenciais AWS por OIDC + Terraform + Terragrunt
+inputs:
+  role-to-assume:
+    description: ARN da role (AWS_ROLE_ARN ou AWS_PLAN_ROLE_ARN)
+    required: true
+  aws-region:
+    description: Região AWS
+    default: us-east-1
+runs:
+  using: composite
+  steps:
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.17.2
+        terraform_wrapper: false
+    - name: Terragrunt
+      shell: bash
+      run: |
+        curl -fsSL -o /usr/local/bin/terragrunt \
+          https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.2/terragrunt_linux_amd64
+        chmod +x /usr/local/bin/terragrunt
+        terragrunt --version

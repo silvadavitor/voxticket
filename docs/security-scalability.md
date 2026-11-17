@@ -15,6 +15,7 @@
 | ALB | `drop_invalid_header_fields` | `ecs-services` |
 | Custo | Alerta de orçamento antes do primeiro deploy (50/80/100% e previsão) | `infra/modules/budget` |
 | IaC | Scan com **Checkov** no CI | `.github/workflows/ci.yml` |
+| CI/CD | **OIDC** (sem chave AWS no GitHub); role de deploy só no environment `aws` (com aprovação opcional) e sem poder alterar a si mesma; role de **plan somente leitura** para PRs | `infra/modules/github-oidc`, `.github/workflows/` |
 
 **Fica para produção, fora do escopo acadêmico:**
 - HTTPS no ALB, que exige domínio e certificado ACM;
@@ -47,3 +48,4 @@ minutos o `desiredCount` sobe; acompanhe com `make aws-status`.
 | Serviços: unidade | Cada dono escreve os testes do seu serviço (ex.: reserva atômica, idempotência) | dentro de `services/<servico>` |
 | Sistema: falhas | F1–F8 automatizados, com consultas SQL de verificação | `make f1` … `make f8` |
 | CI | Todo push e PR roda testes da infra, Checkov e `docker build` de cada serviço | `.github/workflows/ci.yml` |
+| Plan em PR | `terragrunt plan` de toda a infra a cada PR que mexe em `infra/` | `.github/workflows/infra-plan.yml` |
