@@ -17,9 +17,9 @@
 
 | Nome | Responsabilidade |
 |---|---|
-| Vitor _(sobrenome)_ | Infraestrutura (Terraform/Terragrunt, AWS), observabilidade e um serviço |
-| _Integrante 2_ | _serviços_ |
-| _Integrante 3_ | _serviços_ |
+| Vitor da Silva | Infraestrutura (Terraform/Terragrunt, AWS), observabilidade e um serviço |
+| Pedro B. Freitag | Serviços _(a definir quais)_ |
+| Samuel Jose Candido | Serviços _(a definir quais)_ |
 
 O cliente envia um áudio, o sistema transcreve, classifica o texto e abre um chamado. O recurso
 escasso são os **créditos de transcrição por cliente**: o crédito é reservado quando o áudio chega,
