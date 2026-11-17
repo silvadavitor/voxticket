@@ -1,0 +1,328 @@
+{
+  "exchanges": [
+    {
+      "name": "events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "events.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "categorization-service.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "events.dlx",
+        "x-dead-letter-routing-key": "categorization-service.dlq"
+      }
+    },
+    {
+      "name": "categorization-service.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notification-service.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "events.dlx",
+        "x-dead-letter-routing-key": "notification-service.dlq"
+      }
+    },
+    {
+      "name": "notification-service.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "quota-service.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "events.dlx",
+        "x-dead-letter-routing-key": "quota-service.dlq"
+      }
+    },
+    {
+      "name": "quota-service.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "request-service.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "events.dlx",
+        "x-dead-letter-routing-key": "request-service.dlq"
+      }
+    },
+    {
+      "name": "request-service.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "ticket-service.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "events.dlx",
+        "x-dead-letter-routing-key": "ticket-service.dlq"
+      }
+    },
+    {
+      "name": "ticket-service.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "transcription-worker.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "events.dlx",
+        "x-dead-letter-routing-key": "transcription-worker.dlq"
+      }
+    },
+    {
+      "name": "transcription-worker.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "categorization-service.q",
+      "destination_type": "queue",
+      "routing_key": "CategorizationRequested",
+      "arguments": {}
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "categorization-service.dlq",
+      "destination_type": "queue",
+      "routing_key": "categorization-service.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "notification-service.q",
+      "destination_type": "queue",
+      "routing_key": "RequestFailed",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "notification-service.q",
+      "destination_type": "queue",
+      "routing_key": "TicketOpened",
+      "arguments": {}
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "notification-service.dlq",
+      "destination_type": "queue",
+      "routing_key": "notification-service.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "quota-service.q",
+      "destination_type": "queue",
+      "routing_key": "AudioReceived",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "quota-service.q",
+      "destination_type": "queue",
+      "routing_key": "CreditReleaseRequested",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "quota-service.q",
+      "destination_type": "queue",
+      "routing_key": "TicketOpened",
+      "arguments": {}
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "quota-service.dlq",
+      "destination_type": "queue",
+      "routing_key": "quota-service.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "AudioCategorized",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "AudioTranscribed",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "CreditRejected",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "CreditReserved",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "TicketOpened",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "TicketRejected",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "request-service.q",
+      "destination_type": "queue",
+      "routing_key": "TranscriptionFailed",
+      "arguments": {}
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "request-service.dlq",
+      "destination_type": "queue",
+      "routing_key": "request-service.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "ticket-service.q",
+      "destination_type": "queue",
+      "routing_key": "TicketRequested",
+      "arguments": {}
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "ticket-service.dlq",
+      "destination_type": "queue",
+      "routing_key": "ticket-service.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "transcription-worker.q",
+      "destination_type": "queue",
+      "routing_key": "TranscriptDiscardRequested",
+      "arguments": {}
+    },
+    {
+      "source": "events",
+      "vhost": "/",
+      "destination": "transcription-worker.q",
+      "destination_type": "queue",
+      "routing_key": "TranscriptionRequested",
+      "arguments": {}
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "transcription-worker.dlq",
+      "destination_type": "queue",
+      "routing_key": "transcription-worker.dlq",
+      "arguments": {}
+    }
+  ]
+}

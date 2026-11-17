@@ -1,0 +1,53 @@
+# OTel Collector → Datadog.
+# Env: DD_API_KEY, DD_SITE, ENVIRONMENT, RABBITMQ_MGMT_URL, RABBITMQ_USER, RABBITMQ_PASSWORD
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  # Profundidade das filas/DLQs direto da API de management do RabbitMQ / Amazon MQ
+  rabbitmq:
+    endpoint: ${env:RABBITMQ_MGMT_URL}
+    username: ${env:RABBITMQ_USER}
+    password: ${env:RABBITMQ_PASSWORD}
+    collection_interval: 15s
+
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:ENVIRONMENT}
+        action: upsert
+
+connectors:
+  # Calcula as métricas de APM (hits, erros, latência) a partir dos traces
+  datadog/connector: {}
+
+exporters:
+  datadog:
+    api:
+      key: ${env:DD_API_KEY}
+      site: ${env:DD_SITE}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [datadog/connector, datadog]
+    metrics:
+      receivers: [otlp, rabbitmq, datadog/connector]
+      processors: [resource, batch]
+      exporters: [datadog]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [datadog]

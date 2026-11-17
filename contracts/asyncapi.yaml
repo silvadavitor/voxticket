@@ -1,0 +1,346 @@
+asyncapi: 3.0.0
+info:
+  title: VoxTicket — Áudio → Chamados
+  version: 0.1.0
+  description: |
+    Eventos trocados pelos serviços. Todas as mensagens são publicadas no exchange
+    topic `events` com routing key = nome do evento (ex.: `AudioReceived`).
+    Cada serviço consome da sua própria fila quorum `<servico>.q` (DLQ: `<servico>.dlq`).
+defaultContentType: application/json
+servers:
+  local:
+    host: rabbitmq:5672
+    protocol: amqp
+  aws:
+    host: '{brokerHost}:5671'
+    protocol: amqps
+    description: Amazon MQ for RabbitMQ
+    variables:
+      brokerHost:
+        description: Vem de BROKER_URL
+channels:
+  AudioReceived:
+    address: AudioReceived
+    description: 'Produtor: request-service. Consumidores: quota-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      AudioReceived:
+        $ref: '#/components/messages/AudioReceived'
+  CreditReserved:
+    address: CreditReserved
+    description: 'Produtor: quota-service. Consumidores: request-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      CreditReserved:
+        $ref: '#/components/messages/CreditReserved'
+  CreditRejected:
+    address: CreditRejected
+    description: 'Produtor: quota-service. Consumidores: request-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      CreditRejected:
+        $ref: '#/components/messages/CreditRejected'
+  TranscriptionRequested:
+    address: TranscriptionRequested
+    description: 'Produtor: request-service. Consumidores: transcription-worker.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      TranscriptionRequested:
+        $ref: '#/components/messages/TranscriptionRequested'
+  AudioTranscribed:
+    address: AudioTranscribed
+    description: 'Produtor: transcription-worker. Consumidores: request-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      AudioTranscribed:
+        $ref: '#/components/messages/AudioTranscribed'
+  TranscriptionFailed:
+    address: TranscriptionFailed
+    description: 'Produtor: transcription-worker. Consumidores: request-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      TranscriptionFailed:
+        $ref: '#/components/messages/TranscriptionFailed'
+  TranscriptDiscardRequested:
+    address: TranscriptDiscardRequested
+    description: 'Produtor: request-service. Consumidores: transcription-worker.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      TranscriptDiscardRequested:
+        $ref: '#/components/messages/TranscriptDiscardRequested'
+  CategorizationRequested:
+    address: CategorizationRequested
+    description: 'Produtor: request-service. Consumidores: categorization-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      CategorizationRequested:
+        $ref: '#/components/messages/CategorizationRequested'
+  AudioCategorized:
+    address: AudioCategorized
+    description: 'Produtor: categorization-service. Consumidores: request-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      AudioCategorized:
+        $ref: '#/components/messages/AudioCategorized'
+  TicketRequested:
+    address: TicketRequested
+    description: 'Produtor: request-service. Consumidores: ticket-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      TicketRequested:
+        $ref: '#/components/messages/TicketRequested'
+  TicketOpened:
+    address: TicketOpened
+    description: 'Produtor: ticket-service. Consumidores: request-service, quota-service, notification-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      TicketOpened:
+        $ref: '#/components/messages/TicketOpened'
+  TicketRejected:
+    address: TicketRejected
+    description: 'Produtor: ticket-service. Consumidores: request-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      TicketRejected:
+        $ref: '#/components/messages/TicketRejected'
+  CreditReleaseRequested:
+    address: CreditReleaseRequested
+    description: 'Produtor: request-service. Consumidores: quota-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      CreditReleaseRequested:
+        $ref: '#/components/messages/CreditReleaseRequested'
+  RequestFailed:
+    address: RequestFailed
+    description: 'Produtor: request-service. Consumidores: notification-service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: events
+          type: topic
+          durable: true
+    messages:
+      RequestFailed:
+        $ref: '#/components/messages/RequestFailed'
+operations:
+  publishAudioReceived:
+    action: send
+    channel:
+      $ref: '#/channels/AudioReceived'
+    summary: 'Publicado por request-service'
+  publishCreditReserved:
+    action: send
+    channel:
+      $ref: '#/channels/CreditReserved'
+    summary: 'Publicado por quota-service'
+  publishCreditRejected:
+    action: send
+    channel:
+      $ref: '#/channels/CreditRejected'
+    summary: 'Publicado por quota-service'
+  publishTranscriptionRequested:
+    action: send
+    channel:
+      $ref: '#/channels/TranscriptionRequested'
+    summary: 'Publicado por request-service'
+  publishAudioTranscribed:
+    action: send
+    channel:
+      $ref: '#/channels/AudioTranscribed'
+    summary: 'Publicado por transcription-worker'
+  publishTranscriptionFailed:
+    action: send
+    channel:
+      $ref: '#/channels/TranscriptionFailed'
+    summary: 'Publicado por transcription-worker'
+  publishTranscriptDiscardRequested:
+    action: send
+    channel:
+      $ref: '#/channels/TranscriptDiscardRequested'
+    summary: 'Publicado por request-service'
+  publishCategorizationRequested:
+    action: send
+    channel:
+      $ref: '#/channels/CategorizationRequested'
+    summary: 'Publicado por request-service'
+  publishAudioCategorized:
+    action: send
+    channel:
+      $ref: '#/channels/AudioCategorized'
+    summary: 'Publicado por categorization-service'
+  publishTicketRequested:
+    action: send
+    channel:
+      $ref: '#/channels/TicketRequested'
+    summary: 'Publicado por request-service'
+  publishTicketOpened:
+    action: send
+    channel:
+      $ref: '#/channels/TicketOpened'
+    summary: 'Publicado por ticket-service'
+  publishTicketRejected:
+    action: send
+    channel:
+      $ref: '#/channels/TicketRejected'
+    summary: 'Publicado por ticket-service'
+  publishCreditReleaseRequested:
+    action: send
+    channel:
+      $ref: '#/channels/CreditReleaseRequested'
+    summary: 'Publicado por request-service'
+  publishRequestFailed:
+    action: send
+    channel:
+      $ref: '#/channels/RequestFailed'
+    summary: 'Publicado por request-service'
+components:
+  messages:
+    AudioReceived:
+      name: AudioReceived
+      summary: 'Áudio recebido e gravado no S3; pede reserva de crédito.'
+      payload:
+        $ref: './schemas/AudioReceived.v1.schema.json'
+    CreditReserved:
+      name: CreditReserved
+      summary: 'Crédito reservado atomicamente para o pedido.'
+      payload:
+        $ref: './schemas/CreditReserved.v1.schema.json'
+    CreditRejected:
+      name: CreditRejected
+      summary: 'Cliente sem crédito disponível.'
+      payload:
+        $ref: './schemas/CreditRejected.v1.schema.json'
+    TranscriptionRequested:
+      name: TranscriptionRequested
+      summary: 'Pede a transcrição do áudio.'
+      payload:
+        $ref: './schemas/TranscriptionRequested.v1.schema.json'
+    AudioTranscribed:
+      name: AudioTranscribed
+      summary: 'Transcrição concluída e gravada em transcripts/{requestId}.json.'
+      payload:
+        $ref: './schemas/AudioTranscribed.v1.schema.json'
+    TranscriptionFailed:
+      name: TranscriptionFailed
+      summary: 'Transcrição falhou após N tentativas.'
+      payload:
+        $ref: './schemas/TranscriptionFailed.v1.schema.json'
+    TranscriptDiscardRequested:
+      name: TranscriptDiscardRequested
+      summary: 'Compensação de resultado atrasado (F7): marcar transcrição como DISCARDED.'
+      payload:
+        $ref: './schemas/TranscriptDiscardRequested.v1.schema.json'
+    CategorizationRequested:
+      name: CategorizationRequested
+      summary: 'Pede a classificação do texto transcrito.'
+      payload:
+        $ref: './schemas/CategorizationRequested.v1.schema.json'
+    AudioCategorized:
+      name: AudioCategorized
+      summary: 'Texto classificado (v1: categoria; v2: + prioridade/confiança — bônus de versionamento).'
+      payload:
+        $ref: './schemas/AudioCategorized.v1.schema.json'
+    TicketRequested:
+      name: TicketRequested
+      summary: 'Pede a abertura do chamado.'
+      payload:
+        $ref: './schemas/TicketRequested.v1.schema.json'
+    TicketOpened:
+      name: TicketOpened
+      summary: 'Chamado aberto. Evento com vários interessados.'
+      payload:
+        $ref: './schemas/TicketOpened.v1.schema.json'
+    TicketRejected:
+      name: TicketRejected
+      summary: 'Chamado recusado; dispara compensação.'
+      payload:
+        $ref: './schemas/TicketRejected.v1.schema.json'
+    CreditReleaseRequested:
+      name: CreditReleaseRequested
+      summary: 'Compensação: devolver o crédito reservado (só se RESERVED).'
+      payload:
+        $ref: './schemas/CreditReleaseRequested.v1.schema.json'
+    RequestFailed:
+      name: RequestFailed
+      summary: 'Pedido terminou sem chamado; cliente deve ser avisado.'
+      payload:
+        $ref: './schemas/RequestFailed.v1.schema.json'

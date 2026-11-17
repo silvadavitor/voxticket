@@ -1,0 +1,326 @@
+# Sobe o sistema inteiro localmente (MiniStack + RabbitMQ + 1 Postgres por serviço + serviços).
+#
+#   cp .env.example .env
+#   docker compose up -d                      # só infraestrutura
+#   docker compose --profile apps up -d       # infraestrutura + microsserviços
+#
+# TODO(entrega): quando todos os serviços tiverem Dockerfile, remover `profiles: [apps]`
+# para que um único `docker compose up` suba tudo (exigência do enunciado).
+
+name: voxticket
+
+x-app-env: &app-env
+  ENVIRONMENT: ${ENVIRONMENT:-local}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://ministack:4566}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  S3_BUCKET: ${S3_BUCKET:-voxticket-local-audios}
+  BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+  BROKER_EXCHANGE: events
+  DB_PORT: "5432"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${ENVIRONMENT:-local}
+
+# Um Postgres por serviço (banco por serviço). Usuário/senha/db iguais ao segredo
+# voxticket/local/db/<servico> criado pelo infra-init.
+x-postgres: &postgres
+  image: postgres:17-alpine
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+
+x-app-depends: &app-depends
+  rabbitmq-init:
+    condition: service_completed_successfully
+  infra-init:
+    condition: service_completed_successfully
+
+services:
+  # ============================ infraestrutura ============================
+
+  ministack:
+    image: ${MINISTACK_IMAGE:-ministackorg/ministack:latest} # TODO(infra): confirmar imagem/tag
+    ports:
+      - "4566:4566"
+    environment:
+      S3_PERSIST: "1" # sem isso os áudios somem quando o MiniStack reinicia
+    volumes:
+      - ministack-data:/var/lib/ministack # TODO(infra): confirmar caminho de dados do MiniStack
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    hostname: rabbitmq # nome fixo: o diretório de dados depende do hostname (F6)
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  postgres-request:
+    <<: *postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: requests
+      POSTGRES_USER: requests_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-request-data:/var/lib/postgresql/data
+
+  postgres-quota:
+    <<: *postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: quota
+      POSTGRES_USER: quota_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-quota-data:/var/lib/postgresql/data
+
+  postgres-transcription:
+    <<: *postgres
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_DB: transcription
+      POSTGRES_USER: transcription_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-transcription-data:/var/lib/postgresql/data
+
+  postgres-categorization:
+    <<: *postgres
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_DB: categorization
+      POSTGRES_USER: categorization_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-categorization-data:/var/lib/postgresql/data
+
+  postgres-ticket:
+    <<: *postgres
+    ports:
+      - "5437:5432"
+    environment:
+      POSTGRES_DB: ticket
+      POSTGRES_USER: ticket_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-ticket-data:/var/lib/postgresql/data
+
+  postgres-notification:
+    <<: *postgres
+    ports:
+      - "5438:5432"
+    environment:
+      POSTGRES_DB: notification
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+
+  # Terragrunt aplica infra/live/ministack (bucket S3, segredos) no MiniStack
+  infra-init:
+    build:
+      context: .
+      dockerfile: infra/docker/terragrunt.Dockerfile
+    working_dir: /repo/infra/live/ministack
+    command:
+      - |
+        until nc -z ministack 4566; do echo "aguardando ministack..."; sleep 2; done
+        terragrunt run --all --non-interactive apply
+    environment:
+      AWS_ENDPOINT_URL: http://ministack:4566
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      DD_API_KEY: ${DD_API_KEY:-}
+      DD_APP_KEY: ${DD_APP_KEY:-}
+      DD_HOST: https://api.${DD_SITE:-datadoghq.com}
+      TG_STATE_DIR: /state
+      TG_DOWNLOAD_DIR: /state/.terragrunt-cache
+      TF_PLUGIN_CACHE_DIR: /plugins
+    volumes:
+      - ./:/repo
+      - tfstate:/state
+      - tfplugins:/plugins
+    depends_on:
+      - ministack
+
+  # Aplica rabbitmq/definitions.json (exchanges, filas quorum, DLQs)
+  rabbitmq-init:
+    build:
+      context: .
+      dockerfile: infra/docker/rabbitmq-init.Dockerfile
+    environment:
+      BROKER_MGMT_URL: http://rabbitmq:15672
+      BROKER_USERNAME: ${RABBITMQ_USER:-guest}
+      BROKER_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ============================ observabilidade ============================
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.${OTEL_BACKEND:-jaeger}.yaml"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      DD_API_KEY: ${DD_API_KEY:-}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      RABBITMQ_MGMT_URL: http://rabbitmq:15672
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - ./observability/otel-collector:/etc/otelcol:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+
+  # ============================ microsserviços ============================
+  # Cada dono: crie services/<servico>/Dockerfile. Contrato de env em services/<servico>/README.md.
+
+  request-service:
+    profiles: [apps]
+    build: ./services/request-service
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *app-env
+      SERVICE_NAME: request-service
+      OTEL_SERVICE_NAME: request-service
+      BROKER_QUEUE: request-service.q
+      DB_HOST: postgres-request
+      DB_SECRET_ID: voxticket/local/db/request-service
+      SAGA_TIMEOUT_MS: ${SAGA_TIMEOUT_MS:-60000}
+    depends_on:
+      <<: *app-depends
+      postgres-request:
+        condition: service_healthy
+
+  quota-service:
+    profiles: [apps]
+    build: ./services/quota-service
+    ports:
+      - "8081:8080"
+    environment:
+      <<: *app-env
+      SERVICE_NAME: quota-service
+      OTEL_SERVICE_NAME: quota-service
+      BROKER_QUEUE: quota-service.q
+      DB_HOST: postgres-quota
+      DB_SECRET_ID: voxticket/local/db/quota-service
+    depends_on:
+      <<: *app-depends
+      postgres-quota:
+        condition: service_healthy
+
+  transcription-worker:
+    profiles: [apps]
+    build: ./services/transcription-worker
+    ports:
+      - "8090-8092:8080" # 1 porta por réplica
+    deploy:
+      replicas: 3 # R4 / F8
+    environment:
+      <<: *app-env
+      SERVICE_NAME: transcription-worker
+      OTEL_SERVICE_NAME: transcription-worker
+      BROKER_QUEUE: transcription-worker.q
+      DB_HOST: postgres-transcription
+      DB_SECRET_ID: voxticket/local/db/transcription-worker
+      TRANSCRIBE_LATENCY_MS_MIN: ${TRANSCRIBE_LATENCY_MS_MIN:-500}
+      TRANSCRIBE_LATENCY_MS_MAX: ${TRANSCRIBE_LATENCY_MS_MAX:-3000}
+      TRANSCRIBE_FAILURE_RATE: ${TRANSCRIBE_FAILURE_RATE:-0.1}
+      TRANSCRIBE_MAX_ATTEMPTS: ${TRANSCRIBE_MAX_ATTEMPTS:-3}
+      TRANSCRIBER_MODE: ${TRANSCRIBER_MODE:-fake}
+    depends_on:
+      <<: *app-depends
+      postgres-transcription:
+        condition: service_healthy
+
+  categorization-service:
+    profiles: [apps]
+    build: ./services/categorization-service
+    ports:
+      - "8083:8080"
+    environment:
+      <<: *app-env
+      SERVICE_NAME: categorization-service
+      OTEL_SERVICE_NAME: categorization-service
+      BROKER_QUEUE: categorization-service.q
+      DB_HOST: postgres-categorization
+      DB_SECRET_ID: voxticket/local/db/categorization-service
+    depends_on:
+      <<: *app-depends
+      postgres-categorization:
+        condition: service_healthy
+
+  ticket-service:
+    profiles: [apps]
+    build: ./services/ticket-service
+    ports:
+      - "8082:8080"
+    environment:
+      <<: *app-env
+      SERVICE_NAME: ticket-service
+      OTEL_SERVICE_NAME: ticket-service
+      BROKER_QUEUE: ticket-service.q
+      DB_HOST: postgres-ticket
+      DB_SECRET_ID: voxticket/local/db/ticket-service
+    depends_on:
+      <<: *app-depends
+      postgres-ticket:
+        condition: service_healthy
+
+  notification-service:
+    profiles: [apps]
+    build: ./services/notification-service
+    ports:
+      - "8084:8080"
+    environment:
+      <<: *app-env
+      SERVICE_NAME: notification-service
+      OTEL_SERVICE_NAME: notification-service
+      BROKER_QUEUE: notification-service.q
+      DB_HOST: postgres-notification
+      DB_SECRET_ID: voxticket/local/db/notification-service
+    depends_on:
+      <<: *app-depends
+      postgres-notification:
+        condition: service_healthy
+
+volumes:
+  ministack-data:
+  rabbitmq-data:
+  postgres-request-data:
+  postgres-quota-data:
+  postgres-transcription-data:
+  postgres-categorization-data:
+  postgres-ticket-data:
+  postgres-notification-data:
+  tfstate:
+  tfplugins:
