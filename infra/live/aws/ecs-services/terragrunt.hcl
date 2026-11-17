@@ -1,5 +1,5 @@
-# Todos os microsserviços + otel-collector no ECS Fargate, mais as tasks de init.
-# Imagens: <ecr>/<voxticket>/<servico>:${IMAGE_TAG} (ver infra/scripts/push-images.sh).
+# Microsserviços + otel-collector no ECS Fargate.
+# Imagens: <ecr>/voxticket/<servico>:${IMAGE_TAG} (infra/scripts/aws.sh images).
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")
@@ -15,24 +15,35 @@ locals {
   datadog        = get_env("DD_API_KEY", "") != ""
   otel_namespace = "voxticket.internal"
 
-  # Configuração específica de cada serviço (o resto é comum)
+  # O que é específico de cada serviço. s3_access: none | read | readwrite (menor privilégio).
   catalog = {
     "request-service" = {
       public        = true
       desired_count = 1
+      s3_access     = "readwrite" # upload do áudio e move para failed/
+      autoscaling   = null
       environment = {
         SAGA_TIMEOUT_MS = get_env("SAGA_TIMEOUT_MS", "60000")
-        PUBLIC_BASE_URL = "" # TODO: preencher com o DNS do ALB se a API precisar montar statusUrl absoluta
       }
     }
     "quota-service" = {
       public        = false
       desired_count = 1
+      s3_access     = "none"
+      autoscaling   = null
       environment   = {}
     }
     "transcription-worker" = {
       public        = false
-      desired_count = 3 # R4
+      desired_count = 3           # R4: réplicas concorrentes na mesma fila
+      s3_access     = "readwrite" # lê o áudio, grava transcripts/
+      # bônus: autoescala pelo backlog da fila (mínimo 2 mantém o R4)
+      autoscaling = {
+        min              = 2
+        max              = 6
+        queue            = "transcription-worker.q"
+        backlog_per_task = 5
+      }
       environment = {
         TRANSCRIBE_LATENCY_MS_MIN = get_env("TRANSCRIBE_LATENCY_MS_MIN", "500")
         TRANSCRIBE_LATENCY_MS_MAX = get_env("TRANSCRIBE_LATENCY_MS_MAX", "3000")
@@ -44,16 +55,22 @@ locals {
     "categorization-service" = {
       public        = false
       desired_count = 1
+      s3_access     = "read" # lê a transcrição
+      autoscaling   = null
       environment   = {}
     }
     "ticket-service" = {
       public        = false
       desired_count = 1
+      s3_access     = "none"
+      autoscaling   = null
       environment   = {}
     }
     "notification-service" = {
       public        = false
       desired_count = 1
+      s3_access     = "none"
+      autoscaling   = null
       environment   = {}
     }
   }
@@ -73,16 +90,16 @@ dependency "network" {
 dependency "storage" {
   config_path                             = "../storage"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
-  mock_outputs                            = { bucket_name = "mock" }
+  mock_outputs                            = { bucket_name = "mock", bucket_arn = "arn:aws:s3:::mock" }
 }
 
 dependency "secrets" {
   config_path                             = "../secrets"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
   mock_outputs = {
-    db_secret_arns     = { for k, _ in include.root.locals.databases : k => "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock" }
-    db_secret_names    = { for k, _ in include.root.locals.databases : k => "mock" }
-    broker_secret_arn  = "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock"
+    db_secret_arns     = { for k, _ in include.root.locals.databases : k => "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-${k}" }
+    db_secret_names    = { for k, _ in include.root.locals.databases : k => "mock-${k}" }
+    broker_secret_arn  = "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-broker"
     datadog_secret_arn = null
   }
 }
@@ -99,13 +116,14 @@ dependency "messaging" {
   mock_outputs = {
     amqp_endpoint  = "amqps://mock:5671"
     management_url = "https://mock"
+    broker_name    = "mock"
   }
 }
 
 dependency "ecr" {
   config_path                             = "../ecr"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
-  mock_outputs                            = { repository_urls = { for k in concat(keys(include.root.locals.databases), ["db-init", "rabbitmq-init"]) : k => "mock/${k}" } }
+  mock_outputs                            = { repository_urls = { for k in keys(include.root.locals.databases) : k => "mock/${k}" } }
 }
 
 dependency "ecs_cluster" {
@@ -113,8 +131,8 @@ dependency "ecs_cluster" {
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
   mock_outputs = {
     cluster_arn        = "arn:aws:ecs:us-east-1:000000000000:cluster/mock"
+    cluster_name       = "mock"
     execution_role_arn = "arn:aws:iam::000000000000:role/mock"
-    task_role_arn      = "arn:aws:iam::000000000000:role/mock"
     log_group_name     = "mock"
   }
 }
@@ -122,14 +140,16 @@ dependency "ecs_cluster" {
 inputs = {
   name                       = include.root.locals.name
   cluster_arn                = dependency.ecs_cluster.outputs.cluster_arn
+  cluster_name               = dependency.ecs_cluster.outputs.cluster_name
   execution_role_arn         = dependency.ecs_cluster.outputs.execution_role_arn
-  task_role_arn              = dependency.ecs_cluster.outputs.task_role_arn
   log_group_name             = dependency.ecs_cluster.outputs.log_group_name
   vpc_id                     = dependency.network.outputs.vpc_id
   subnet_ids                 = dependency.network.outputs.public_subnet_ids
   services_security_group_id = dependency.network.outputs.services_security_group_id
   alb_security_group_id      = dependency.network.outputs.alb_security_group_id
   discovery_namespace        = local.otel_namespace
+  bucket_arn                 = dependency.storage.outputs.bucket_arn
+  broker_name                = dependency.messaging.outputs.broker_name
 
   common_environment = {
     ENVIRONMENT                 = include.root.locals.environment
@@ -153,10 +173,13 @@ inputs = {
   services = merge(
     {
       for svc, cfg in local.catalog : svc => {
-        image         = "${dependency.ecr.outputs.repository_urls[svc]}:${local.tag}"
-        port          = 8080
-        public        = cfg.public
-        desired_count = cfg.desired_count
+        image           = "${dependency.ecr.outputs.repository_urls[svc]}:${local.tag}"
+        port            = 8080
+        public          = cfg.public
+        desired_count   = cfg.desired_count
+        s3_access       = cfg.s3_access
+        autoscaling     = cfg.autoscaling
+        iam_secret_arns = [dependency.secrets.outputs.db_secret_arns[svc]] # só o próprio banco
         environment = merge(cfg.environment, {
           BROKER_QUEUE = "${svc}.q"
           DB_SECRET_ID = dependency.secrets.outputs.db_secret_names[svc]
@@ -169,7 +192,6 @@ inputs = {
         image        = "otel/opentelemetry-collector-contrib:0.165.0"
         port         = 4317
         discoverable = true
-        health_path  = "/"
         command      = ["--config=env:OTEL_CONFIG"]
         environment = {
           OTEL_CONFIG       = file("${include.root.locals.repo_root}/observability/otel-collector/config.datadog.yaml")
@@ -185,21 +207,4 @@ inputs = {
       }
     } : {}
   )
-
-  # Rodar uma vez após o apply (o output init_task_run_commands imprime o comando)
-  init_tasks = {
-    "db-init" = {
-      image = "${dependency.ecr.outputs.repository_urls["db-init"]}:${local.tag}"
-      environment = {
-        SECRETS_PREFIX = include.root.locals.secrets_prefix
-        SERVICES       = join(" ", keys(include.root.locals.databases))
-      }
-    }
-    "rabbitmq-init" = {
-      image = "${dependency.ecr.outputs.repository_urls["rabbitmq-init"]}:${local.tag}"
-      environment = {
-        BROKER_MGMT_URL = dependency.messaging.outputs.management_url
-      }
-    }
-  }
 }

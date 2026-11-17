@@ -63,4 +63,4 @@ regredir. Se fosse preciso ordem por pedido: particionar por `requestId` (consis
 | IaC que recria o ambiente | Terraform + Terragrunt (MiniStack e AWS) | infra |
 | CQRS | `request_status_view` alimentada por eventos | request-service |
 | Versionamento de eventos | `AudioCategorized` v1 e v2 convivendo | categorization-service |
-| Autoescala por fila | ECS Service Auto Scaling na métrica de profundidade da fila (AWS) | infra (opcional) |
+| Autoescala por fila | Target tracking: mensagens na fila (Amazon MQ) / tasks do worker, 2–6 réplicas | infra (feito) |

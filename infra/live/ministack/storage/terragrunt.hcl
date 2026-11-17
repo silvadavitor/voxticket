@@ -12,4 +12,6 @@ inputs = {
   failed_expiration_days = 7
   # TODO(infra): confirmar se o MiniStack suporta lifecycle; se não, false.
   enable_lifecycle = true
+  # MiniStack é HTTP: a policy "só HTTPS" bloquearia tudo. Na AWS fica ligada.
+  enforce_tls = false
 }

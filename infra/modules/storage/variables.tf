@@ -20,3 +20,9 @@ variable "force_destroy" {
   type        = bool
   default     = true
 }
+
+variable "enforce_tls" {
+  description = "Bucket policy negando acesso sem HTTPS. Desligue no MiniStack (endpoint HTTP)."
+  type        = bool
+  default     = true
+}

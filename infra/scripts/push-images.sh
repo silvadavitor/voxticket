@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 REGION=${AWS_REGION:-us-east-1}
-TAG=${IMAGE_TAG:-latest}
+TAG=${IMAGE_TAG:-latest}  # aws.sh exporta o hash do commit
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 REGISTRY="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com"
 PLATFORM=${PLATFORM:-linux/amd64}

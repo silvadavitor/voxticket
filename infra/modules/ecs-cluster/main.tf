@@ -1,4 +1,5 @@
-# Cluster ECS + logs + IAM compartilhado pelos serviços.
+# Cluster ECS + logs + execution role compartilhada.
+# A task role (o que o código pode acessar) é criada POR SERVIÇO no módulo ecs-services (menor privilégio).
 
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
@@ -12,7 +13,7 @@ resource "aws_ecs_cluster" "this" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "enabled" # métricas RunningTaskCount usadas na autoescala
   }
 }
 
@@ -41,8 +42,8 @@ data "aws_iam_policy_document" "ecs_assume" {
   }
 }
 
-# ---- execution role: puxar imagem, escrever log, injetar secrets ----
-
+# Execution role: usada pelo agente do ECS para puxar imagem, escrever log e injetar
+# os `secrets` da task definition (credenciais do broker, API key do Datadog).
 resource "aws_iam_role" "execution" {
   name               = "${var.name}-execution"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
@@ -61,51 +62,7 @@ data "aws_iam_policy_document" "execution_secrets" {
 }
 
 resource "aws_iam_role_policy" "execution_secrets" {
-  name   = "read-project-secrets"
+  name   = "inject-project-secrets"
   role   = aws_iam_role.execution.id
   policy = data.aws_iam_policy_document.execution_secrets.json
-}
-
-# ---- task role: o que o código dos serviços pode fazer ----
-
-resource "aws_iam_role" "task" {
-  name               = "${var.name}-task"
-  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
-}
-
-data "aws_iam_policy_document" "task" {
-  statement {
-    sid       = "AudiosBucket"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"] # mover p/ failed/ = Get + Put + Delete
-    resources = ["${var.bucket_arn}/*"]
-  }
-
-  statement {
-    sid       = "AudiosBucketList"
-    actions   = ["s3:ListBucket"]
-    resources = [var.bucket_arn]
-  }
-
-  statement {
-    sid       = "ReadSecrets"
-    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-    resources = [local.secrets_arn_pattern]
-  }
-
-  statement {
-    sid = "EcsExec"
-    actions = [
-      "ssmmessages:CreateControlChannel",
-      "ssmmessages:CreateDataChannel",
-      "ssmmessages:OpenControlChannel",
-      "ssmmessages:OpenDataChannel",
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_role_policy" "task" {
-  name   = "service-permissions"
-  role   = aws_iam_role.task.id
-  policy = data.aws_iam_policy_document.task.json
 }

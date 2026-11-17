@@ -12,16 +12,18 @@ infra/
 │   ├── messaging/           #   Amazon MQ for RabbitMQ                       [só aws]
 │   ├── ecr/                 #   repositórios de imagens                      [só aws]
 │   ├── ecs-cluster/         #   cluster, logs, IAM                           [só aws]
-│   ├── ecs-services/        #   Fargate: serviços, ALB, Cloud Map, tasks init [só aws]
+│   ├── ecs-services/        #   Fargate: serviços, role por serviço, ALB, Cloud Map, autoescala [só aws]
 │   ├── budget/              #   alerta de orçamento                          [só aws]
 │   └── datadog/             #   dashboard + monitores (só com DD_API_KEY/DD_APP_KEY)
 ├── live/
 │   ├── root.hcl             # provider (MiniStack x AWS), backend de estado, nomes comuns
 │   ├── ministack/           # env local: storage, secrets, datadog
 │   └── aws/                 # env de entrega: budget → network → storage → secrets → database,
-│                            #   messaging, ecr, ecs-cluster → ecs-services, datadog
+│                            #   messaging, ecr, ecs-cluster → ecs-init → ecs-services, datadog
 ├── docker/                  # imagens: terragrunt (infra-init), db-init (só AWS), rabbitmq-init
-└── scripts/                 # db-init.sh, rabbitmq-init.sh, push-images.sh
+└── scripts/                 # aws.sh (up/down), db-init.sh, rabbitmq-init.sh, push-images.sh
+
+Cada módulo com regra importante tem `tests/*.tftest.hcl` (rodam com `make test`, sem conta AWS).
 ```
 
 ## Local (MiniStack)
@@ -39,36 +41,46 @@ terragrunt run --all plan
 
 ## AWS (entrega)
 
-Pré-requisitos: AWS CLI autenticado (`AWS_PROFILE`), Terragrunt ≥ 1.2, Terraform ≥ 1.10, Docker.
+Pré-requisitos: AWS CLI autenticado (`aws sso login` ou `AWS_PROFILE`), Terragrunt ≥ 1.2,
+Terraform ≥ 1.10, Docker e `jq`.
+
+```bash
+BUDGET_EMAILS="a@x.com,b@y.com" make aws-up   # ~25 min na primeira vez
+make aws-status                                # URL da API + réplicas
+make aws-deploy                                # rebuild das imagens + redeploy (após mudar código)
+make aws-down                                  # destrói tudo
+```
+
+O que o `make aws-up` ([`scripts/aws.sh`](scripts/aws.sh)) faz, na ordem:
+
+| # | Passo | Units |
+|---|---|---|
+| 1 | Alerta de orçamento (o enunciado exige antes do primeiro deploy) e bucket do state (`--backend-bootstrap`) | `budget` |
+| 2 | Base: rede, S3, segredos, RDS (~5 min), Amazon MQ (~15 min), ECR, cluster | `network storage secrets database messaging ecr ecs-cluster` |
+| 3 | Build e push das imagens (tag = hash do commit) | `scripts/push-images.sh` |
+| 4 | Tasks de init: `db-init` (databases e usuários) e `rabbitmq-init` (filas e DLQs); espera terminar e confere o exit code | `ecs-init` |
+| 5 | Serviços: ALB, 6 serviços, autoescala do worker; Datadog se houver chaves | `ecs-services datadog` |
+
+`make aws-down` destrói tudo, **exceto** o alerta de orçamento (grátis) e o bucket de state (centavos).
+O destroy funciona sem passo manual: bucket e ECR com `force_destroy`, segredos sem janela de
+recuperação, RDS sem snapshot final e sem proteção contra deleção. Dá para rodar `aws-down` e
+`aws-up` em seguida quantas vezes quiser; é a demonstração do bônus de IaC.
+
+Variáveis opcionais: `AWS_REGION` (us-east-1), `IMAGE_TAG`, `API_ALLOWED_CIDRS` (restringe a API, ex.:
+`"200.1.2.3/32"`), `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`, `BUDGET_LIMIT_USD` (20).
+
+Comandos avulsos, se precisar:
 
 ```bash
 cd infra/live/aws
-
-# 0. alerta de orçamento ANTES de tudo (exigência do enunciado).
-#    --backend-bootstrap cria o bucket do state (voxticket-tfstate-<account>) na primeira vez.
-BUDGET_EMAILS="voce@exemplo.com" terragrunt run --working-dir budget --backend-bootstrap apply
-
-# 1. base: rede, bucket, segredos, banco, broker, ECR, cluster (RDS ~5 min, Amazon MQ ~15 min)
-terragrunt run --all --backend-bootstrap --filter '!./ecs-services' --filter '!./datadog' --filter '!./budget' apply
-
-# 2. imagens
-IMAGE_TAG=v1 ../../scripts/push-images.sh
-
-# 3. serviços (+ otel-collector se DD_API_KEY estiver definido)
-IMAGE_TAG=v1 terragrunt run --working-dir ecs-services apply
-
-# 4. init (uma vez): copie os comandos do output
-terragrunt run --working-dir ecs-services output init_task_run_commands
-
-# 5. URL da API
-terragrunt run --working-dir ecs-services output api_url
+terragrunt run --all plan                      # o que mudaria
+terragrunt run --working-dir ecs-services apply
 ```
-
-**Depois da apresentação:** `terragrunt run --all destroy` (custo é responsabilidade do grupo).
 
 ## Custo estimado (us-east-1, ligado 24 h)
 
 RDS `db.t4g.micro` + Amazon MQ `mq.t3.micro` + 8 tasks Fargate 0.25 vCPU + ALB ≈ **US$ 3–4/dia**.
+Suba perto da apresentação e rode `make aws-down` logo depois.
 Sem NAT Gateway: as tasks usam subnet pública com IP público, e o RDS e o MQ ficam em subnet privada.
 
 ## Decisões e pendências

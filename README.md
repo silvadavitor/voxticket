@@ -2,12 +2,44 @@
 
 **Do áudio ao chamado:** transcrição → categorização → abertura de chamados, como sistema distribuído.
 
-Trabalho Final — Sistemas Distribuídos (FURB, 2026/2).
-Apresentação **25/11/2026** · Código público até **02/12/2026**.
+![ci](../../actions/workflows/ci.yml/badge.svg)
+
+| | |
+|---|---|
+| **Projeto** | Trabalho Final de Sistemas Distribuídos |
+| **Instituição** | Universidade Regional de Blumenau (FURB), Departamento de Sistemas e Computação |
+| **Professor** | Gabriel Castellani de Oliveira |
+| **Apresentação / defesa** | 25/11/2026 |
+| **Entrega do código** | 02/12/2026 |
+| **Nuvem** | AWS (desenvolvimento local com MiniStack) |
+
+### Integrantes
+
+| Nome | Responsabilidade |
+|---|---|
+| Vitor _(sobrenome)_ | Infraestrutura (Terraform/Terragrunt, AWS), observabilidade e um serviço |
+| _Integrante 2_ | _serviços_ |
+| _Integrante 3_ | _serviços_ |
 
 O cliente envia um áudio, o sistema transcreve, classifica o texto e abre um chamado. O recurso
 escasso são os **créditos de transcrição por cliente**: o crédito é reservado quando o áudio chega,
 consumido quando o chamado é aberto e devolvido se algo falhar (saga com compensação).
+
+## Comandos rápidos
+
+```bash
+make help        # lista tudo
+make up          # sobe o sistema inteiro localmente
+make ps          # estado dos containers
+make logs s=quota-service
+make f5          # roda o cenário de falha F5 (vale f1…f8)
+make test        # testes da infraestrutura
+make reset       # derruba e apaga os dados locais
+
+BUDGET_EMAILS=voce@exemplo.com make aws-up   # cria TUDO na AWS (~25 min)
+make aws-status                               # URL da API e réplicas
+make aws-down                                 # destrói TUDO na AWS
+```
 
 ## Mapa do repositório
 
@@ -20,6 +52,8 @@ consumido quando o chamado é aberto e devolvido se algo falhar (saga com compen
 ├── infra/                    # Terraform (modules/) + Terragrunt (live/ministack, live/aws)
 ├── observability/            # OpenTelemetry Collector → Datadog (ou Jaeger como reserva)
 ├── scripts/failures/         # um script por cenário F1–F8 + consultas SQL de verificação
+├── .github/workflows/ci.yml  # CI: testes da infra, scan de segurança, build das imagens
+├── Makefile                  # atalhos (make help)
 └── docker-compose.yml        # sobe tudo localmente
 ```
 
@@ -145,7 +179,32 @@ docker compose --profile apps down -v     # para tudo e APAGA bancos, filas e S3
 
 ## Deploy na AWS (entrega final)
 
-Mesmo código, mesmos módulos Terraform, outro ambiente Terragrunt. Ver [infra/README.md](infra/README.md).
+Mesmo código e mesmos módulos Terraform, mas em outro ambiente Terragrunt. Um comando sobe, outro destrói:
+
+```bash
+aws sso login                                  # ou export AWS_PROFILE=...
+BUDGET_EMAILS=voce@exemplo.com make aws-up     # orçamento → base → imagens → init → serviços
+make aws-status                                # mostra a URL da API
+make aws-down                                  # depois da apresentação: destrói tudo
+```
+
+Detalhes, custo e o que cada passo faz: [infra/README.md](infra/README.md).
+
+## Requisitos do enunciado: onde estão
+
+| Exigência | Como foi atendida | Onde |
+|---|---|---|
+| ≥ 4 microsserviços, ≥ 3 linguagens | 6 serviços em C#, Java e Python | [services/](services/) |
+| Mensageria assíncrona + contratos | RabbitMQ (Amazon MQ na AWS); AsyncAPI + JSON Schema, envelope único | [contracts/](contracts/), [ADR-002](docs/adr/ADR-002-mensageria-rabbitmq.md) |
+| ≥ 3 categorias de nuvem | Mensageria, armazenamento de objetos (S3), segredos (Secrets Manager), banco (RDS), computação (ECS) | [docs/architecture.md](docs/architecture.md#nuvem) |
+| Banco por serviço | Postgres próprio por serviço; na AWS, um database e um usuário isolados por serviço | [ADR-003](docs/adr/ADR-003-postgres-database-por-servico.md) |
+| Infra só por script | Terraform + Terragrunt; MiniStack e AWS com os mesmos módulos | [infra/](infra/) |
+| Dockerfile + `/health` + `docker compose up` | um por serviço; compose sobe tudo | [docker-compose.yml](docker-compose.yml) |
+| R1–R6 e cenários F1–F8 | Outbox, idempotência, reserva atômica, 202, réplicas, reconexão; um script por cenário | [docs/requirements.md](docs/requirements.md), [scripts/failures/](scripts/failures/) |
+| Segurança | Menor privilégio por serviço, segredos fora do código, rede privada, TLS, scan | [docs/security-scalability.md](docs/security-scalability.md#segurança) |
+| Escalabilidade | Consumidores concorrentes, autoescala pela fila, serviços sem estado | [docs/security-scalability.md](docs/security-scalability.md#escalabilidade) |
+| Testes | Testes do Terraform, CI, cenários de falha automatizados | [docs/security-scalability.md](docs/security-scalability.md#testes) |
+| Bônus | OpenTelemetry, IaC, autoescala, CQRS, versionamento de eventos | [docs/requirements.md](docs/requirements.md#bônus-até-10) |
 
 ## Fluxo de trabalho do grupo
 

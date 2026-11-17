@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  infra:
+    name: Infra (Terraform + Terragrunt + compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+      - name: Instala Terragrunt
+        run: |
+          curl -fsSL -o /usr/local/bin/terragrunt \
+            https://github.com/gruntwork-io/terragrunt/releases/download/v1.2.2/terragrunt_linux_amd64
+          chmod +x /usr/local/bin/terragrunt
+      - name: fmt, validate, terraform test, hcl fmt, compose config
+        run: make test
+
+  security:
+    name: Scan de segurança da infra (Checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/modules
+          framework: terraform
+          soft_fail: true # relatório no log; não bloqueia o merge
+
+  services:
+    name: Build das imagens dos serviços
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - request-service
+          - notification-service
+          - quota-service
+          - ticket-service
+          - transcription-worker
+          - categorization-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build
+        run: |
+          if [ -f services/${{ matrix.service }}/Dockerfile ]; then
+            docker build -t ${{ matrix.service }}:ci services/${{ matrix.service }}
+          else
+            echo "::notice::${{ matrix.service }} ainda sem Dockerfile"
+          fi

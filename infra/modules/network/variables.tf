@@ -12,3 +12,9 @@ variable "app_port" {
   type        = number
   default     = 8080
 }
+
+variable "api_allowed_cidrs" {
+  description = "Quem pode chamar a API no ALB. Ex.: [\"200.1.2.3/32\"] para liberar só o IP da apresentação."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

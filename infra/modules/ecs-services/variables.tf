@@ -11,8 +11,21 @@ variable "execution_role_arn" {
   type = string
 }
 
-variable "task_role_arn" {
-  type = string
+variable "cluster_name" {
+  description = "Nome do cluster (dimensão das métricas de autoescala)."
+  type        = string
+}
+
+variable "bucket_arn" {
+  description = "Bucket de áudios (para as permissões s3_access)."
+  type        = string
+  default     = "arn:aws:s3:::none"
+}
+
+variable "broker_name" {
+  description = "Nome do broker Amazon MQ (dimensão da métrica MessageCount). Obrigatório se algum serviço tiver autoscaling."
+  type        = string
+  default     = null
 }
 
 variable "log_group_name" {
@@ -61,31 +74,47 @@ variable "common_secrets" {
 
 variable "services" {
   description = "Serviços de longa duração."
+  default     = {}
   type = map(object({
-    image         = string
-    cpu           = optional(number, 256)
-    memory        = optional(number, 512)
-    desired_count = optional(number, 1)
-    port          = optional(number)
-    public        = optional(bool, false)
-    discoverable  = optional(bool, false)
-    health_path   = optional(string, "/health")
-    command       = optional(list(string), [])
-    environment   = optional(map(string), {})
-    secrets       = optional(map(string), {})
+    image           = string
+    cpu             = optional(number, 256)
+    memory          = optional(number, 512)
+    desired_count   = optional(number, 1)
+    port            = optional(number)
+    public          = optional(bool, false)
+    discoverable    = optional(bool, false)
+    health_path     = optional(string, "/health")
+    command         = optional(list(string), [])
+    environment     = optional(map(string), {})
+    secrets         = optional(map(string), {})
+    iam_secret_arns = optional(list(string), [])
+    s3_access       = optional(string, "none")
+    autoscaling = optional(object({
+      min              = number
+      max              = number
+      queue            = string
+      backlog_per_task = optional(number, 5)
+    }))
   }))
+
+  validation {
+    condition     = alltrue([for s in values(var.services) : contains(["none", "read", "readwrite"], s.s3_access)])
+    error_message = "s3_access deve ser none, read ou readwrite."
+  }
 }
 
 variable "init_tasks" {
   description = "Tasks one-off (db-init, rabbitmq-init): só task definition; rodar com aws ecs run-task."
   type = map(object({
-    image       = string
-    cpu         = optional(number, 256)
-    memory      = optional(number, 512)
-    port        = optional(number)
-    command     = optional(list(string), [])
-    environment = optional(map(string), {})
-    secrets     = optional(map(string), {})
+    image           = string
+    cpu             = optional(number, 256)
+    memory          = optional(number, 512)
+    port            = optional(number)
+    command         = optional(list(string), [])
+    environment     = optional(map(string), {})
+    secrets         = optional(map(string), {})
+    iam_secret_arns = optional(list(string), [])
+    s3_access       = optional(string, "none")
   }))
   default = {}
 }

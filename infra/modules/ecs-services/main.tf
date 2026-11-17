@@ -1,28 +1,45 @@
-# Serviços Fargate genéricos (todos os microsserviços + otel-collector) e tasks de init (one-off).
-# - public = true    → atrás do ALB (só o request-service)
-# - discoverable     → registrado no Cloud Map: <nome>.<namespace> (ex.: otel-collector.voxticket.internal)
+# Serviços Fargate genéricos (microsserviços + otel-collector) e tasks de init (one-off).
+# - public = true      → atrás do ALB (só o request-service)
+# - discoverable       → registrado no Cloud Map: <nome>.<namespace> (ex.: otel-collector.voxticket.internal)
+# - iam_secret_arns    → segredos que o CÓDIGO do serviço pode ler (só o próprio banco)
+# - s3_access          → none | read | readwrite no bucket de áudios
+# - autoscaling        → escala pelo backlog da fila no Amazon MQ (mensagens por task)
 
 data "aws_region" "current" {}
 
 locals {
   public_services = { for k, s in var.services : k => s if s.public }
   discoverable    = { for k, s in var.services : k => s if s.discoverable }
+  autoscaled      = { for k, s in var.services : k => s if s.autoscaling != null }
   create_alb      = length(local.public_services) > 0
 
   # services e init_tasks normalizados no mesmo tipo de objeto (para usar em for_each)
   all_tasks = merge(
-    { for k, s in var.services : k => { image = s.image, cpu = s.cpu, memory = s.memory, port = s.port, command = s.command, environment = s.environment, secrets = s.secrets } },
-    { for k, s in var.init_tasks : k => { image = s.image, cpu = s.cpu, memory = s.memory, port = s.port, command = s.command, environment = s.environment, secrets = s.secrets } },
+    { for k, s in var.services : k => {
+      image       = s.image, cpu = s.cpu, memory = s.memory, port = s.port, command = s.command,
+      environment = s.environment, secrets = s.secrets, iam_secret_arns = s.iam_secret_arns, s3_access = s.s3_access
+    } },
+    { for k, s in var.init_tasks : k => {
+      image       = s.image, cpu = s.cpu, memory = s.memory, port = s.port, command = s.command,
+      environment = s.environment, secrets = s.secrets, iam_secret_arns = s.iam_secret_arns, s3_access = s.s3_access
+    } },
   )
+
+  s3_actions = {
+    none      = []
+    read      = ["s3:GetObject"]
+    readwrite = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"] # mover p/ failed/ = Get + Put + Delete
+  }
 
   container_defs = {
     for k, s in local.all_tasks : k => [{
-      name        = k
-      image       = s.image
-      essential   = true
-      command     = length(s.command) > 0 ? s.command : null
-      environment = [for name, value in merge(var.common_environment, s.environment, { SERVICE_NAME = k, OTEL_SERVICE_NAME = k }) : { name = name, value = value }]
-      secrets     = [for name, arn in merge(var.common_secrets, s.secrets) : { name = name, valueFrom = arn }]
+      name                   = k
+      image                  = s.image
+      essential              = true
+      readonlyRootFilesystem = false
+      command                = length(s.command) > 0 ? s.command : null
+      environment            = [for name, value in merge(var.common_environment, s.environment, { SERVICE_NAME = k, OTEL_SERVICE_NAME = k }) : { name = name, value = value }]
+      secrets                = [for name, arn in merge(var.common_secrets, s.secrets) : { name = name, valueFrom = arn }]
       portMappings = s.port == null ? [] : [{
         containerPort = s.port
         protocol      = "tcp"
@@ -39,6 +56,66 @@ locals {
   }
 }
 
+# ---------------- IAM: uma task role por serviço (menor privilégio) ----------------
+
+data "aws_iam_policy_document" "ecs_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "task" {
+  for_each           = local.all_tasks
+  name               = substr("${var.name}-${each.key}-task", 0, 64)
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+}
+
+data "aws_iam_policy_document" "task" {
+  for_each = local.all_tasks
+
+  statement {
+    sid = "EcsExec"
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
+
+  dynamic "statement" {
+    for_each = length(each.value.iam_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "OwnSecretsOnly"
+      actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+      resources = each.value.iam_secret_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = each.value.s3_access != "none" ? [1] : []
+    content {
+      sid       = "AudiosBucket"
+      actions   = local.s3_actions[each.value.s3_access]
+      resources = ["${var.bucket_arn}/*"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "task" {
+  for_each = local.all_tasks
+  name     = "least-privilege"
+  role     = aws_iam_role.task[each.key].id
+  policy   = data.aws_iam_policy_document.task[each.key].json
+}
+
+# ---------------- task definitions ----------------
+
 resource "aws_ecs_task_definition" "this" {
   for_each                 = local.all_tasks
   family                   = "${var.name}-${each.key}"
@@ -47,7 +124,7 @@ resource "aws_ecs_task_definition" "this" {
   cpu                      = each.value.cpu
   memory                   = each.value.memory
   execution_role_arn       = var.execution_role_arn
-  task_role_arn            = var.task_role_arn
+  task_role_arn            = aws_iam_role.task[each.key].arn
   container_definitions    = jsonencode(local.container_defs[each.key])
 
   runtime_platform {
@@ -81,11 +158,12 @@ resource "aws_service_discovery_service" "this" {
 # ---------------- ALB (API pública) ----------------
 
 resource "aws_lb" "this" {
-  count              = local.create_alb ? 1 : 0
-  name               = substr("${var.name}-api", 0, 32)
-  load_balancer_type = "application"
-  security_groups    = [var.alb_security_group_id]
-  subnets            = var.subnet_ids
+  count                      = local.create_alb ? 1 : 0
+  name                       = substr("${var.name}-api", 0, 32)
+  load_balancer_type         = "application"
+  security_groups            = [var.alb_security_group_id]
+  subnets                    = var.subnet_ids
+  drop_invalid_header_fields = true
 }
 
 resource "aws_lb_target_group" "this" {
@@ -95,6 +173,8 @@ resource "aws_lb_target_group" "this" {
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = var.vpc_id
+
+  deregistration_delay = 15
 
   health_check {
     path                = each.value.health_path
@@ -155,4 +235,85 @@ resource "aws_ecs_service" "this" {
   }
 
   depends_on = [aws_lb_listener.http]
+}
+
+# ---------------- autoescala pelo backlog da fila (bônus) ----------------
+# backlog por task = mensagens na fila (Amazon MQ) / tasks rodando (Container Insights).
+# Target tracking mantém esse valor perto de `backlog_per_task`.
+
+resource "aws_appautoscaling_target" "this" {
+  for_each           = local.autoscaled
+  min_capacity       = each.value.autoscaling.min
+  max_capacity       = each.value.autoscaling.max
+  resource_id        = "service/${var.cluster_name}/${aws_ecs_service.this[each.key].name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "backlog" {
+  for_each           = local.autoscaled
+  name               = "${each.key}-queue-backlog"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.this[each.key].resource_id
+  scalable_dimension = aws_appautoscaling_target.this[each.key].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.this[each.key].service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = each.value.autoscaling.backlog_per_task
+    scale_out_cooldown = 30
+    scale_in_cooldown  = 120
+
+    customized_metric_specification {
+      metrics {
+        id          = "backlog"
+        label       = "mensagens por task"
+        expression  = "queue / IF(tasks < 1, 1, tasks)"
+        return_data = true
+      }
+
+      metrics {
+        id          = "queue"
+        return_data = false
+        metric_stat {
+          stat = "Average"
+          metric {
+            namespace   = "AWS/AmazonMQ"
+            metric_name = "MessageCount"
+            dimensions {
+              name  = "Broker"
+              value = var.broker_name
+            }
+            dimensions {
+              name  = "VirtualHost"
+              value = "/"
+            }
+            dimensions {
+              name  = "Queue"
+              value = each.value.autoscaling.queue
+            }
+          }
+        }
+      }
+
+      metrics {
+        id          = "tasks"
+        return_data = false
+        metric_stat {
+          stat = "Average"
+          metric {
+            namespace   = "ECS/ContainerInsights"
+            metric_name = "RunningTaskCount"
+            dimensions {
+              name  = "ClusterName"
+              value = var.cluster_name
+            }
+            dimensions {
+              name  = "ServiceName"
+              value = each.key
+            }
+          }
+        }
+      }
+    }
+  }
 }
