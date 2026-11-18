@@ -21,25 +21,28 @@ locals {
   # O que é específico de cada serviço. s3_access: none | read | readwrite (menor privilégio).
   catalog = {
     "request-service" = {
-      public        = true
-      desired_count = 1
-      s3_access     = "readwrite" # upload do áudio e move para failed/
-      autoscaling   = null
+      public            = true
+      alb_path_patterns = []
+      desired_count     = 1
+      s3_access         = "readwrite" # upload do áudio e move para failed/
+      autoscaling       = null
       environment = {
         SAGA_TIMEOUT_MS = get_env("SAGA_TIMEOUT_MS", "60000")
       }
     }
     "quota-service" = {
-      public        = false
-      desired_count = 1
-      s3_access     = "none"
-      autoscaling   = null
-      environment   = {}
+      public            = false
+      alb_path_patterns = []
+      desired_count     = 1
+      s3_access         = "none"
+      autoscaling       = null
+      environment       = {}
     }
     "transcription-worker" = {
-      public        = false
-      desired_count = 3           # R4: réplicas concorrentes na mesma fila
-      s3_access     = "readwrite" # lê o áudio, grava transcripts/
+      public            = false
+      alb_path_patterns = []
+      desired_count     = 3           # R4: réplicas concorrentes na mesma fila
+      s3_access         = "readwrite" # lê o áudio, grava transcripts/
       # bônus: autoescala pelo backlog da fila (mínimo 2 mantém o R4)
       autoscaling = {
         min              = 2
@@ -56,25 +59,28 @@ locals {
       }
     }
     "categorization-service" = {
-      public        = false
-      desired_count = 1
-      s3_access     = "read" # lê a transcrição
-      autoscaling   = null
-      environment   = {}
+      public            = false
+      alb_path_patterns = []
+      desired_count     = 1
+      s3_access         = "read" # lê a transcrição
+      autoscaling       = null
+      environment       = {}
     }
     "ticket-service" = {
-      public        = false
-      desired_count = 1
-      s3_access     = "none"
-      autoscaling   = null
-      environment   = {}
+      public            = true
+      alb_path_patterns = ["/tickets", "/tickets/*"] # API de leitura dos chamados
+      desired_count     = 1
+      s3_access         = "none"
+      autoscaling       = null
+      environment       = {}
     }
     "notification-service" = {
-      public        = false
-      desired_count = 1
-      s3_access     = "none"
-      autoscaling   = null
-      environment   = {}
+      public            = false
+      alb_path_patterns = []
+      desired_count     = 1
+      s3_access         = "none"
+      autoscaling       = null
+      environment       = {}
     }
   }
 }
@@ -176,13 +182,14 @@ inputs = {
   services = merge(
     {
       for svc, cfg in local.catalog : svc => {
-        image           = "${dependency.ecr.outputs.repository_urls[svc]}:${local.tag}"
-        port            = 8080
-        public          = cfg.public
-        desired_count   = cfg.desired_count
-        s3_access       = cfg.s3_access
-        autoscaling     = cfg.autoscaling
-        iam_secret_arns = [dependency.secrets.outputs.db_secret_arns[svc]] # só o próprio banco
+        image             = "${dependency.ecr.outputs.repository_urls[svc]}:${local.tag}"
+        port              = 8080
+        public            = cfg.public
+        alb_path_patterns = cfg.alb_path_patterns
+        desired_count     = cfg.desired_count
+        s3_access         = cfg.s3_access
+        autoscaling       = cfg.autoscaling
+        iam_secret_arns   = [dependency.secrets.outputs.db_secret_arns[svc]] # só o próprio banco
         environment = merge(cfg.environment, {
           BROKER_QUEUE = "${svc}.q"
           DB_SECRET_ID = dependency.secrets.outputs.db_secret_names[svc]

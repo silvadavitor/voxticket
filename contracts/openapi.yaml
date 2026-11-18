@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: VoxTicket — API HTTP
+  version: 1.0.0
+  description: |
+    Contrato HTTP dos serviços que o front (e qualquer cliente) consome.
+    O gateway roteia por caminho, removendo o prefixo /api:
+      /api/audios*  → request-service   (local: nginx do `frontend`; AWS: CloudFront → ALB)
+      /api/tickets* → ticket-service
+    Os eventos assíncronos entre serviços estão em asyncapi.yaml.
+
+servers:
+  - url: http://localhost:8088/api
+    description: local (gateway nginx)
+
+paths:
+  /audios:
+    post:
+      summary: Envia um áudio e inicia a saga (R3)
+      operationId: createAudioRequest
+      tags: [request-service]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [tenantId, file]
+              properties:
+                tenantId: { type: string, example: tenant-demo }
+                file: { type: string, format: binary }
+      responses:
+        "202":
+          description: Aceito; o processamento é assíncrono
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, statusUrl]
+                properties:
+                  requestId: { type: string, format: uuid }
+                  statusUrl: { type: string, example: /audios/3f1c… }
+        "400": { description: tenantId ou arquivo ausente }
+        "503": { description: S3 ou banco indisponível (falha rápida) }
+    get:
+      summary: Lista os pedidos mais recentes (tela "Pedidos")
+      operationId: listAudioRequests
+      tags: [request-service]
+      parameters:
+        - { name: tenantId, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200":
+          description: Pedidos, do mais novo para o mais antigo
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AudioRequest" }
+
+  /audios/{id}:
+    get:
+      summary: Status de um pedido (estado da saga)
+      operationId: getAudioRequest
+      tags: [request-service]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Estado atual
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AudioRequest" }
+        "404": { description: pedido não existe }
+
+  /tickets:
+    get:
+      summary: Lista os chamados abertos (tela "Chamados")
+      operationId: listTickets
+      tags: [ticket-service]
+      parameters:
+        - { name: tenantId, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200":
+          description: Chamados, do mais novo para o mais antigo
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ticket" }
+
+  /tickets/{id}:
+    get:
+      summary: Um chamado
+      operationId: getTicket
+      tags: [ticket-service]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Chamado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ticket" }
+        "404": { description: chamado não existe }
+
+  /health:
+    get:
+      summary: Health check (todo serviço tem)
+      operationId: health
+      responses:
+        "200":
+          description: Processo vivo; dependências podem estar fora (R6)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string }
+                  broker: { type: string, enum: [up, down] }
+                  db: { type: string, enum: [up, down] }
+
+components:
+  schemas:
+    AudioRequest:
+      type: object
+      required: [requestId, tenantId, status, createdAt]
+      properties:
+        requestId: { type: string, format: uuid }
+        tenantId: { type: string }
+        status:
+          type: string
+          enum: [RECEIVED, TRANSCRIBING, CATEGORIZING, TICKET_REQUESTED, TICKET_OPENED, REJECTED, FAILED, EXPIRED]
+        category: { type: [string, "null"], example: TECNICO }
+        priority: { type: [string, "null"], enum: [LOW, MEDIUM, HIGH, CRITICAL, null] }
+        ticketId: { type: [string, "null"] }
+        failureReason: { type: [string, "null"], example: "Transcrição falhou 3x: crédito devolvido" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Ticket:
+      type: object
+      required: [ticketId, requestId, tenantId, category, createdAt]
+      properties:
+        ticketId: { type: string, example: TCK-000123 }
+        requestId: { type: string, format: uuid }
+        tenantId: { type: string }
+        category: { type: string, example: TECNICO }
+        priority: { type: [string, "null"], enum: [LOW, MEDIUM, HIGH, CRITICAL, null] }
+        createdAt: { type: string, format: date-time }

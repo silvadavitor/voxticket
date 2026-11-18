@@ -16,13 +16,20 @@
       </div>
     </div>
     <div class="topbar-right">
-      <span id="api-status" class="chip chip-wait">verificando API…</span>
+      <span id="svc-request" class="chip chip-wait">request-service …</span>
+      <span id="svc-ticket" class="chip chip-wait">ticket-service …</span>
       <a class="link-btn" id="link-grafana" target="_blank" rel="noopener">Grafana</a>
       <a class="link-btn" id="link-rabbit" target="_blank" rel="noopener">RabbitMQ</a>
     </div>
   </header>
 
-  <main class="layout">
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" data-tab="pedidos" aria-selected="true">Pedidos</button>
+    <button class="tab" role="tab" data-tab="chamados" aria-selected="false">Chamados <span id="tickets-count" class="count"></span></button>
+  </nav>
+
+  <!-- ===================== PEDIDOS ===================== -->
+  <main class="layout" id="tab-pedidos">
     <section class="card new-request">
       <h2>Novo chamado por voz</h2>
 
@@ -52,9 +59,9 @@
     <section class="card requests">
       <div class="card-head">
         <h2>Pedidos</h2>
-        <button id="btn-clear" class="btn btn-ghost small" type="button">Limpar</button>
+        <span class="muted small">GET /api/audios · atualiza a cada 2 s</span>
       </div>
-      <p id="empty" class="muted">Nenhum pedido ainda. Grave ou envie um áudio.</p>
+      <p id="requests-empty" class="empty muted">Nenhum pedido ainda. Grave ou envie um áudio.</p>
       <ol id="list" class="request-list"></ol>
     </section>
 
@@ -68,16 +75,38 @@
         <button id="btn-race" class="btn btn-primary" type="button">Disparar</button>
       </div>
       <div class="race-board">
-        <div class="stat"><span class="stat-n" id="race-sent">0</span><span>enviados (202)</span></div>
+        <div class="stat"><span class="stat-n" id="race-sent">0</span><span>aceitos (202)</span></div>
         <div class="stat ok"><span class="stat-n" id="race-ok">0</span><span>chamados abertos</span></div>
-        <div class="stat bad"><span class="stat-n" id="race-rejected">0</span><span>recusados (sem crédito)</span></div>
+        <div class="stat bad"><span class="stat-n" id="race-rejected">0</span><span>recusados / compensados</span></div>
         <div class="stat"><span class="stat-n" id="race-pending">0</span><span>em andamento</span></div>
       </div>
     </section>
   </main>
 
+  <!-- ===================== CHAMADOS ===================== -->
+  <main class="single" id="tab-chamados" hidden>
+    <section class="card">
+      <div class="card-head">
+        <h2>Chamados abertos</h2>
+        <div class="filters">
+          <label class="field compact inline"><span>Cliente</span><input id="tickets-tenant" placeholder="todos"></label>
+          <span class="muted small">GET /api/tickets · atualiza a cada 3 s</span>
+        </div>
+      </div>
+      <p id="tickets-empty" class="empty muted">Nenhum chamado ainda.</p>
+      <div class="table-wrap">
+        <table class="tickets" id="tickets-table" hidden>
+          <thead>
+            <tr><th>Chamado</th><th>Cliente</th><th>Categoria</th><th>Prioridade</th><th>Aberto em</th><th>Pedido</th></tr>
+          </thead>
+          <tbody id="tickets-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
   <footer class="footer muted small">
-    Trabalho Final de Sistemas Distribuídos (FURB) · a API é o request-service, por trás de <code>/api</code>
+    Trabalho Final de Sistemas Distribuídos (FURB) · página estática em S3 + CloudFront · contrato da API em <code>contracts/openapi.yaml</code>
   </footer>
 
   <template id="tpl-request">

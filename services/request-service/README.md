@@ -18,6 +18,19 @@ API de entrada (`POST /audios` → 202, `GET /audios/{id}`), upload do áudio ao
 
 Schemas em [`contracts/schemas/`](../../contracts/schemas/). Não altere um contrato sem combinar com quem consome.
 
+## API HTTP (contrato em [`contracts/openapi.yaml`](../../contracts/openapi.yaml))
+
+O front e o gateway dependem destes endpoints exatamente assim (o gateway remove o prefixo `/api`):
+
+| Método | Caminho | Resposta |
+|---|---|---|
+| `POST` | `/audios` (multipart: `tenantId`, `file`) | `202 {requestId, statusUrl}` |
+| `GET` | `/audios?tenantId=&limit=` | lista de pedidos, mais novo primeiro |
+| `GET` | `/audios/{id}` | `{requestId, tenantId, status, category, priority, ticketId, failureReason, createdAt, updatedAt}` |
+| `GET` | `/health` | `{status, service, broker, db}` |
+
+O status é o estado da saga, guardado por este serviço: é ele que responde "em que pé está o pedido" (R3).
+
 ## Requisitos que este serviço demonstra
 
 - R3 — API assíncrona (202 + statusUrl)

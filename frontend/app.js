@@ -1,117 +1,72 @@
-// VoxTicket: página estática que conversa só com a API do request-service.
-// Configuração em config.js (gerado pelo Terraform no deploy). Sem API no ar, entra em MODO DEMO
-// e simula a saga localmente, seguindo o mesmo contrato.
+// VoxTicket: página estática que só conversa com a API (contrato em contracts/openapi.yaml).
+//   /api/audios*  → request-service   (pedidos e estado da saga)
+//   /api/tickets* → ticket-service    (chamados)
+// Configuração em config.js, gerado pelo Terraform no deploy.
 
 const CONFIG = Object.assign(
   { apiBase: "/api", grafanaUrl: "http://localhost:3000", rabbitUrl: "http://localhost:15672" },
   window.VOXTICKET_CONFIG || {},
 );
 
+// status da saga → rótulo, cor e passo atual da linha do tempo (0..4; 5 = tudo concluído)
 const STATUS = {
-  RECEIVED:         { label: "Recebido",           chip: "chip-run",  step: 1 },
-  TRANSCRIBING:     { label: "Transcrevendo",      chip: "chip-run",  step: 2 },
-  CATEGORIZING:     { label: "Categorizando",      chip: "chip-run",  step: 3 },
-  TICKET_REQUESTED: { label: "Abrindo chamado",    chip: "chip-run",  step: 4 },
-  TICKET_OPENED:    { label: "Chamado aberto",     chip: "chip-ok",   step: 5, final: true },
-  REJECTED:         { label: "Recusado: sem crédito", chip: "chip-bad", step: 1, final: true, failed: true },
-  FAILED:           { label: "Falhou: compensado", chip: "chip-bad",  final: true, failed: true },
-  EXPIRED:          { label: "Expirou: compensado", chip: "chip-warn", final: true, failed: true },
+  RECEIVED:         { label: "Recebido",               chip: "chip-run",  step: 1 },
+  TRANSCRIBING:     { label: "Transcrevendo",          chip: "chip-run",  step: 2 },
+  CATEGORIZING:     { label: "Categorizando",          chip: "chip-run",  step: 3 },
+  TICKET_REQUESTED: { label: "Abrindo chamado",        chip: "chip-run",  step: 4 },
+  TICKET_OPENED:    { label: "Chamado aberto",         chip: "chip-ok",   step: 5, final: true },
+  REJECTED:         { label: "Recusado: sem crédito",  chip: "chip-bad",  step: 1, final: true, failed: true },
+  FAILED:           { label: "Falhou: compensado",     chip: "chip-bad",  step: 2, final: true, failed: true },
+  EXPIRED:          { label: "Expirou: compensado",    chip: "chip-warn", step: 2, final: true, failed: true },
 };
+const PRIORITY = { CRITICAL: "chip-bad", HIGH: "chip-warn", MEDIUM: "chip-run", LOW: "chip-wait" };
 
 const $ = (sel) => document.querySelector(sel);
-const state = { demo: false, requests: load(), audio: null, recorder: null };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" }) : "—");
+const state = { audio: null, recorder: null, tab: "pedidos" };
 
-// ---------------------------------------------------------------- API (ou simulação)
+// ---------------------------------------------------------------- API
 
-async function checkApi() {
-  const chip = $("#api-status");
+async function api(path, options = {}) {
+  const r = await fetch(`${CONFIG.apiBase}${path}`, { signal: AbortSignal.timeout(5000), ...options });
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.status === 204 ? null : r.json();
+}
+
+async function checkService(path, chipId, name) {
+  const chip = $(chipId);
   try {
-    const r = await fetch(`${CONFIG.apiBase}/health`, { signal: AbortSignal.timeout(2500) });
-    if (!r.ok) throw new Error(r.status);
-    state.demo = false;
-    chip.textContent = "API online";
-    chip.className = "chip chip-ok";
+    const h = await api(path);
+    const deps = [h.db === "down" && "banco fora", h.broker === "down" && "broker fora"].filter(Boolean);
+    chip.textContent = deps.length ? `${name}: ${deps.join(", ")}` : `${name} online`;
+    chip.className = `chip ${deps.length ? "chip-warn" : "chip-ok"}`;
+    return true;
   } catch {
-    state.demo = true;
-    chip.textContent = "MODO DEMO (API offline: saga simulada)";
-    chip.className = "chip chip-warn";
+    chip.textContent = `${name} offline`;
+    chip.className = "chip chip-bad";
+    return false;
   }
 }
 
-async function postAudio(tenantId, blob, name) {
-  if (state.demo) return demo.post(tenantId);
-  const form = new FormData();
-  form.append("tenantId", tenantId);
-  form.append("file", blob, name);
-  const r = await fetch(`${CONFIG.apiBase}/audios`, { method: "POST", body: form });
-  if (r.status !== 202) throw new Error(`API respondeu ${r.status}`);
-  return r.json(); // { requestId, statusUrl }
+async function checkTicketService() {
+  const chip = $("#svc-ticket");
+  try {
+    await api("/tickets?limit=1");
+    chip.textContent = "ticket-service online";
+    chip.className = "chip chip-ok";
+  } catch {
+    chip.textContent = "ticket-service offline";
+    chip.className = "chip chip-bad";
+  }
 }
 
-async function getStatus(id) {
-  if (state.demo) return demo.get(id);
-  const r = await fetch(`${CONFIG.apiBase}/audios/${id}`);
-  if (!r.ok) throw new Error(`API respondeu ${r.status}`);
-  return r.json(); // { status, category, priority, ticketId, failureReason, failedAtStep? }
+function checkAll() {
+  checkService("/health", "#svc-request", "request-service");
+  checkTicketService();
 }
 
-// ---------------------------------------------------------------- modo demo
-// Reproduz a saga e a regra do recurso escasso (cota por cliente) só no navegador.
-
-const demo = {
-  store: new Map(),
-  quota: new Map(), // tenant → créditos usados
-  limit(tenant) { return tenant === "tenant-f5" ? 10 : 1000; },
-  post(tenant) {
-    const id = crypto.randomUUID();
-    const used = this.quota.get(tenant) || 0;
-    const req = { status: "RECEIVED", tenant, t0: Date.now() };
-    if (used >= this.limit(tenant)) {
-      req.plan = [["REJECTED", 600]];
-      req.failureReason = "Cliente sem créditos de transcrição";
-    } else {
-      this.quota.set(tenant, used + 1);
-      const fail = Math.random() < 0.15;
-      req.plan = fail
-        ? [["TRANSCRIBING", 700], ["FAILED", 3500]]
-        : [["TRANSCRIBING", 700], ["CATEGORIZING", 2800], ["TICKET_REQUESTED", 3800], ["TICKET_OPENED", 4800]];
-      if (fail) {
-        req.failureReason = "Transcrição falhou 3x: crédito devolvido, áudio movido para failed/";
-        req.failedAtStep = 3;
-        req.onFail = () => this.quota.set(tenant, (this.quota.get(tenant) || 1) - 1);
-      }
-    }
-    this.store.set(id, req);
-    return Promise.resolve({ requestId: id, statusUrl: `/audios/${id}` });
-  },
-  get(id) {
-    const req = this.store.get(id);
-    if (!req) return Promise.resolve({ status: "FAILED", failureReason: "desconhecido" });
-    const elapsed = Date.now() - req.t0;
-    for (const [status, at] of req.plan) {
-      if (elapsed >= at && req.status !== status) {
-        req.status = status;
-        if (status === "FAILED" && req.onFail) req.onFail();
-      }
-    }
-    const out = { status: req.status };
-    if (STATUS[req.status].step >= 4 || req.status === "TICKET_OPENED") {
-      out.category = "TECNICO"; out.priority = "HIGH";
-    }
-    if (req.status === "TICKET_OPENED") out.ticketId = `TCK-${id.slice(0, 6).toUpperCase()}`;
-    if (STATUS[req.status].failed) { out.failureReason = req.failureReason; out.failedAtStep = req.failedAtStep; }
-    return Promise.resolve(out);
-  },
-};
-
-// ---------------------------------------------------------------- lista de pedidos
-
-function load() {
-  try { return JSON.parse(localStorage.getItem("voxticket.requests")) || []; } catch { return []; }
-}
-function save() {
-  try { localStorage.setItem("voxticket.requests", JSON.stringify(state.requests.slice(0, 30))); } catch { /* sem storage */ }
-}
+// ---------------------------------------------------------------- pedidos
 
 function traceUrl(id) {
   const pane = {
@@ -125,54 +80,79 @@ function traceUrl(id) {
   return `${CONFIG.grafanaUrl}/explore?schemaVersion=1&orgId=1&panes=${encodeURIComponent(JSON.stringify(pane))}`;
 }
 
-function render(req) {
-  let el = document.getElementById(`r-${req.id}`);
+function renderRequest(req) {
+  let el = document.getElementById(`r-${req.requestId}`);
   if (!el) {
     el = $("#tpl-request").content.firstElementChild.cloneNode(true);
-    el.id = `r-${req.id}`;
+    el.id = `r-${req.requestId}`;
     el.classList.add("new");
-    el.querySelector(".rid").textContent = req.id;
-    el.querySelector(".trace").href = traceUrl(req.id);
-    $("#list").prepend(el);
+    el.querySelector(".rid").textContent = req.requestId;
+    el.querySelector(".trace").href = traceUrl(req.requestId);
   }
   const info = STATUS[req.status] || { label: req.status, chip: "chip-wait", step: 0 };
   const chip = el.querySelector(".status");
   chip.textContent = info.label;
   chip.className = `status chip ${info.chip}`;
 
-  // linha do tempo: passos concluídos, o atual e onde falhou
-  const failedStep = info.failed ? (req.failedAtStep ?? info.step ?? 1) : null;
   el.querySelectorAll(".timeline li").forEach((li) => {
     const s = Number(li.dataset.step);
     li.className = "";
-    if (failedStep !== null) {
-      if (s < failedStep) li.classList.add("done");
-      else if (s === failedStep) li.classList.add("failed");
+    if (info.failed) {
+      if (s < info.step) li.classList.add("done");
+      else if (s === info.step) li.classList.add("failed");
     } else if (s < info.step) li.classList.add("done");
     else if (s === info.step && !info.final) li.classList.add("active");
   });
 
-  const d = [];
-  d.push(`<span>Cliente: <b>${esc(req.tenant)}</b></span>`);
+  const d = [`<span>Cliente: <b>${esc(req.tenantId)}</b></span>`, `<span class="muted">${fmtTime(req.createdAt)}</span>`];
   if (req.category) d.push(`<span>Categoria: <b>${esc(req.category)}</b></span>`);
   if (req.priority) d.push(`<span>Prioridade: <b>${esc(req.priority)}</b></span>`);
   if (req.ticketId) d.push(`<span>Chamado: <b>${esc(req.ticketId)}</b></span>`);
   if (req.failureReason) d.push(`<span class="comp">${esc(req.failureReason)}</span>`);
   el.querySelector(".details").innerHTML = d.join("");
-  $("#empty").hidden = state.requests.length > 0;
+  return el;
 }
 
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+async function refreshRequests() {
+  const list = $("#list");
+  try {
+    const requests = await api("/audios?limit=30");
+    // mantém a ordem da API (mais novo primeiro) reaproveitando os elementos já na tela
+    const els = requests.map(renderRequest);
+    list.replaceChildren(...els);
+    els.forEach((el) => setTimeout(() => el.classList.remove("new"), 500));
+    $("#requests-empty").hidden = requests.length > 0;
+    $("#requests-empty").textContent = "Nenhum pedido ainda. Grave ou envie um áudio.";
+  } catch {
+    $("#requests-empty").hidden = list.children.length > 0;
+    $("#requests-empty").textContent = "request-service fora do ar: suba os serviços (make up).";
+  }
+}
 
-async function track(req, onFinal) {
-  for (;;) {
-    try {
-      Object.assign(req, await getStatus(req.id));
-      render(req);
-      save();
-      if (STATUS[req.status]?.final) { onFinal?.(req); return; }
-    } catch { /* API oscilando: tenta de novo */ }
-    await new Promise((r) => setTimeout(r, 1000));
+// ---------------------------------------------------------------- chamados
+
+async function refreshTickets() {
+  const tenant = $("#tickets-tenant").value.trim();
+  const qs = new URLSearchParams({ limit: "100", ...(tenant && { tenantId: tenant }) });
+  try {
+    const tickets = await api(`/tickets?${qs}`);
+    $("#tickets-body").innerHTML = tickets.map((t) => `
+      <tr>
+        <td><b>${esc(t.ticketId)}</b></td>
+        <td>${esc(t.tenantId)}</td>
+        <td>${esc(t.category)}</td>
+        <td>${t.priority ? `<span class="chip ${PRIORITY[t.priority] || "chip-wait"}">${esc(t.priority)}</span>` : "—"}</td>
+        <td>${fmtTime(t.createdAt)}</td>
+        <td><a href="${traceUrl(t.requestId)}" target="_blank" rel="noopener"><code>${esc(t.requestId).slice(0, 8)}…</code></a></td>
+      </tr>`).join("");
+    $("#tickets-table").hidden = tickets.length === 0;
+    $("#tickets-empty").hidden = tickets.length > 0;
+    $("#tickets-empty").textContent = "Nenhum chamado ainda.";
+    $("#tickets-count").textContent = tickets.length ? tickets.length : "";
+  } catch {
+    $("#tickets-table").hidden = true;
+    $("#tickets-empty").hidden = false;
+    $("#tickets-empty").textContent = "ticket-service fora do ar: suba os serviços (make up).";
   }
 }
 
@@ -181,7 +161,7 @@ async function track(req, onFinal) {
 function setAudio(blob, name) {
   state.audio = blob ? { blob, name } : null;
   $("#btn-send").disabled = !blob;
-  $("#file-name").textContent = blob ? `${name} (${Math.round(blob.size / 1024)} KB)` : "Escolher arquivo de áudio…";
+  $("#file-name").textContent = blob ? `${name} (${Math.max(1, Math.round(blob.size / 1024))} KB)` : "Escolher arquivo de áudio…";
 }
 
 async function toggleRecord() {
@@ -207,8 +187,17 @@ async function toggleRecord() {
     btn.classList.add("recording");
     btn.querySelector(".label").textContent = "Parar";
   } catch {
-    $("#send-msg").textContent = "Sem acesso ao microfone. Use um arquivo.";
+    $("#send-msg").textContent = "Sem acesso ao microfone (o navegador só libera em localhost ou HTTPS). Use um arquivo.";
   }
+}
+
+async function postAudio(tenantId, blob, name) {
+  const form = new FormData();
+  form.append("tenantId", tenantId);
+  form.append("file", blob, name);
+  const r = await fetch(`${CONFIG.apiBase}/audios`, { method: "POST", body: form });
+  if (r.status !== 202) throw new Error(`a API respondeu ${r.status}`);
+  return r.json();
 }
 
 async function send() {
@@ -218,14 +207,13 @@ async function send() {
   msg.textContent = "Enviando…";
   try {
     const { requestId } = await postAudio(tenant, state.audio.blob, state.audio.name);
-    msg.textContent = `202 Accepted: ${requestId}`;
-    const req = { id: requestId, tenant, status: "RECEIVED" };
-    state.requests.unshift(req);
-    render(req);
+    msg.textContent = `202 Accepted · ${requestId}`;
     setAudio(null);
-    track(req);
+    refreshRequests();
   } catch (e) {
-    msg.textContent = `Erro: ${e.message}`;
+    msg.textContent = e.message.includes("Failed to fetch") || e.message.startsWith("5")
+      ? "request-service fora do ar: suba os serviços (make up)."
+      : `Erro: ${e.message}`;
     $("#btn-send").disabled = false;
   }
 }
@@ -235,6 +223,7 @@ async function send() {
 async function race() {
   const n = Math.min(Math.max(Number($("#race-n").value) || 1, 1), 200);
   const tenant = $("#race-tenant").value.trim() || "tenant-f5";
+  const ids = new Set();
   const c = { sent: 0, ok: 0, rejected: 0, pending: 0 };
   const show = () => {
     $("#race-sent").textContent = c.sent; $("#race-ok").textContent = c.ok;
@@ -244,34 +233,49 @@ async function race() {
   show();
   const silence = new Blob([new Uint8Array(1024)], { type: "audio/ogg" });
 
-  await Promise.all(Array.from({ length: n }, async () => {
+  await Promise.all(Array.from({ length: n }, () =>
+    postAudio(tenant, silence, "corrida.ogg").then(({ requestId }) => { ids.add(requestId); c.sent++; show(); }).catch(() => {})));
+
+  // acompanha pelo estado da saga até todos terminarem
+  const timer = setInterval(async () => {
     try {
-      const { requestId } = await postAudio(tenant, silence, "corrida.ogg");
-      c.sent++; c.pending++; show();
-      const req = { id: requestId, tenant, status: "RECEIVED" };
-      track(req, (final) => {
-        c.pending--;
-        if (final.status === "TICKET_OPENED") c.ok++;
-        else c.rejected++;
-        show();
-      });
-    } catch { /* não aceito */ }
-  }));
-  $("#btn-race").disabled = false;
+      const all = await api(`/audios?tenantId=${encodeURIComponent(tenant)}&limit=200`);
+      const mine = all.filter((r) => ids.has(r.requestId));
+      c.ok = mine.filter((r) => r.status === "TICKET_OPENED").length;
+      c.rejected = mine.filter((r) => STATUS[r.status]?.failed).length;
+      c.pending = ids.size - c.ok - c.rejected;
+      show();
+      if (c.pending === 0) { clearInterval(timer); $("#btn-race").disabled = false; }
+    } catch { /* API oscilando: tenta de novo */ }
+  }, 1500);
 }
 
-// ---------------------------------------------------------------- inicialização
+// ---------------------------------------------------------------- abas e inicialização
+
+function showTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on);
+  });
+  $("#tab-pedidos").hidden = tab !== "pedidos";
+  $("#tab-chamados").hidden = tab !== "chamados";
+  (tab === "pedidos" ? refreshRequests : refreshTickets)();
+}
 
 $("#link-grafana").href = `${CONFIG.grafanaUrl}/d/voxticket-saga`;
 $("#link-rabbit").href = CONFIG.rabbitUrl;
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("#btn-record").addEventListener("click", toggleRecord);
 $("#file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) setAudio(f, f.name); });
 $("#btn-send").addEventListener("click", send);
 $("#btn-race").addEventListener("click", race);
-$("#btn-clear").addEventListener("click", () => { state.requests = []; save(); $("#list").innerHTML = ""; $("#empty").hidden = false; });
+$("#tickets-tenant").addEventListener("input", refreshTickets);
 
-checkApi().then(() => {
-  state.requests.forEach((r) => { render(r); if (!STATUS[r.status]?.final) track(r); });
-  $("#empty").hidden = state.requests.length > 0;
-});
-setInterval(checkApi, 10000);
+checkAll();
+showTab("pedidos");
+setInterval(checkAll, 5000);
+setInterval(() => (state.tab === "pedidos" ? refreshRequests() : refreshTickets()), 2000);
+refreshTickets(); // contador da aba
+setInterval(() => state.tab === "pedidos" && refreshTickets(), 5000);

@@ -181,3 +181,34 @@ h2 { font-size: 1.25rem; margin-bottom: .9rem; }
   .topbar { padding: 1rem; }
   .timeline li { font-size: .7rem; }
 }
+
+/* ---------- abas ---------- */
+.tabs { display: flex; gap: .4rem; padding: 1rem 2rem 0; }
+.tab {
+  font: inherit; font-weight: 650; border: 1px solid var(--line); border-bottom: 0; background: transparent;
+  color: var(--muted); padding: .65rem 1.3rem; border-radius: 12px 12px 0 0; cursor: pointer;
+}
+.tab.active { background: var(--card); color: var(--text); box-shadow: 0 -2px 0 var(--brand) inset; }
+.count:not(:empty) {
+  display: inline-block; min-width: 1.5rem; padding: 0 .4rem; margin-left: .3rem; border-radius: 999px;
+  background: var(--brand); color: #fff; font-size: .75rem; text-align: center;
+}
+.single { padding: 1.6rem 2rem; }
+.empty { padding: 1.4rem; text-align: center; border: 2px dashed var(--line); border-radius: 12px; }
+
+/* ---------- tabela de chamados ---------- */
+.filters { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.field.inline { display: flex; align-items: center; gap: .5rem; }
+.table-wrap { overflow-x: auto; }
+.tickets { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.tickets th {
+  text-align: left; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  padding: .6rem .8rem; border-bottom: 2px solid var(--line);
+}
+.tickets td { padding: .75rem .8rem; border-bottom: 1px solid var(--line); }
+.tickets tbody tr:hover { background: var(--bg); }
+.tickets a { color: var(--brand); }
+
+@media (max-width: 900px) {
+  .tabs, .single { padding-left: 1rem; padding-right: 1rem; }
+}
