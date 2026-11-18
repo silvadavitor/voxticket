@@ -127,4 +127,5 @@ Tratamento de erro:
 | Mensageria | RabbitMQ (container) | Amazon MQ for RabbitMQ | ADR-002 |
 | Banco de dados | 1 Postgres (container) por serviço | RDS Postgres (database + usuário por serviço) | ADR-003 |
 | Computação | docker compose | ECS Fargate | ADR-001 |
+| Front estático + CDN | S3 (MiniStack) + nginx simulando o CloudFront | S3 privado + CloudFront (HTTPS, `/api/*` → ALB) | ADR-005 |
 | Observabilidade | OTel Collector → Jaeger/Datadog | OTel Collector (sidecar) → Datadog | ADR-004 |

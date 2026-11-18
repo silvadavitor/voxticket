@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoxTicket</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◉</span>
+      <div>
+        <h1>VoxTicket</h1>
+        <p class="tagline">Do áudio ao chamado: transcrição → categorização → abertura de chamado</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="api-status" class="chip chip-wait">verificando API…</span>
+      <a class="link-btn" id="link-grafana" target="_blank" rel="noopener">Grafana</a>
+      <a class="link-btn" id="link-rabbit" target="_blank" rel="noopener">RabbitMQ</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card new-request">
+      <h2>Novo chamado por voz</h2>
+
+      <label class="field">
+        <span>Cliente (tenant)</span>
+        <input id="tenant" value="tenant-demo" autocomplete="off">
+      </label>
+
+      <div class="record">
+        <button id="btn-record" class="btn btn-record" type="button">
+          <span class="dot"></span><span class="label">Gravar áudio</span>
+        </button>
+        <span id="record-time" class="muted"></span>
+      </div>
+
+      <div class="or"><span>ou</span></div>
+
+      <label class="file">
+        <input id="file" type="file" accept="audio/*">
+        <span id="file-name">Escolher arquivo de áudio…</span>
+      </label>
+
+      <button id="btn-send" class="btn btn-primary" type="button" disabled>Enviar</button>
+      <p id="send-msg" class="muted small" role="status"></p>
+    </section>
+
+    <section class="card requests">
+      <div class="card-head">
+        <h2>Pedidos</h2>
+        <button id="btn-clear" class="btn btn-ghost small" type="button">Limpar</button>
+      </div>
+      <p id="empty" class="muted">Nenhum pedido ainda. Grave ou envie um áudio.</p>
+      <ol id="list" class="request-list"></ol>
+    </section>
+
+    <section class="card race">
+      <h2>Corrida pelo recurso escasso <span class="tag">F5</span></h2>
+      <p class="muted">Dispara pedidos simultâneos para um cliente com cota limitada.
+        Com cota 10, exatamente 10 devem virar chamado e o resto ser recusado.</p>
+      <div class="race-form">
+        <label class="field compact"><span>Pedidos</span><input id="race-n" type="number" min="1" max="200" value="100"></label>
+        <label class="field compact"><span>Cliente</span><input id="race-tenant" value="tenant-f5"></label>
+        <button id="btn-race" class="btn btn-primary" type="button">Disparar</button>
+      </div>
+      <div class="race-board">
+        <div class="stat"><span class="stat-n" id="race-sent">0</span><span>enviados (202)</span></div>
+        <div class="stat ok"><span class="stat-n" id="race-ok">0</span><span>chamados abertos</span></div>
+        <div class="stat bad"><span class="stat-n" id="race-rejected">0</span><span>recusados (sem crédito)</span></div>
+        <div class="stat"><span class="stat-n" id="race-pending">0</span><span>em andamento</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer muted small">
+    Trabalho Final de Sistemas Distribuídos (FURB) · a API é o request-service, por trás de <code>/api</code>
+  </footer>
+
+  <template id="tpl-request">
+    <li class="request">
+      <div class="request-head">
+        <code class="rid"></code>
+        <span class="status chip"></span>
+      </div>
+      <ol class="timeline">
+        <li data-step="0">Recebido</li>
+        <li data-step="1">Crédito reservado</li>
+        <li data-step="2">Transcrito</li>
+        <li data-step="3">Categorizado</li>
+        <li data-step="4">Chamado aberto</li>
+      </ol>
+      <div class="details"></div>
+      <div class="request-actions">
+        <a class="link-btn small trace" target="_blank" rel="noopener">Ver trace no Grafana</a>
+      </div>
+    </li>
+  </template>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

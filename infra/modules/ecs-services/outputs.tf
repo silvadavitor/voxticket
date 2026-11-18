@@ -17,3 +17,8 @@ output "init_task_run_commands" {
     ])
   }
 }
+
+output "alb_dns_name" {
+  description = "Origem /api/* do CloudFront (unit frontend)."
+  value       = try(aws_lb.this[0].dns_name, null)
+}
