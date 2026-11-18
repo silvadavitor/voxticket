@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Linguagem** | Java (Spring Boot) |
+| **Linguagem** | Python 3.12 |
 | **Responsável** | _a definir_ |
 | **Banco** | Postgres próprio (local: container `postgres-quota`; AWS: database `quota` no RDS), credenciais no Secrets Manager: `voxticket/<env>/db/quota-service` |
 | **Fila** | `quota-service.q` (DLQ `quota-service.dlq`) |
@@ -54,3 +54,31 @@ Schemas em [`contracts/schemas/`](../../contracts/schemas/). Não altere um cont
 | `DB_SECRET_ID` | `voxticket/local/db/quota-service` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` |
 | `OTEL_SERVICE_NAME` | `quota-service` |
+
+
+## Implementação (Python)
+
+Stack: Python 3.12, FastAPI (health), aio-pika (RabbitMQ), asyncpg (Postgres), jsonschema, OpenTelemetry.
+Arquitetura em camadas (Clean Architecture / POO) - dependências apontam sempre para dentro:
+
+```
+app/
+  domain/          # Reservation (entidade), eventos, exceções - sem dependências externas
+  application/     # ProcessQuotaUseCase + portas (QuotaRepository, ReservationRepository, Outbox, UnitOfWork...)
+  infrastructure/  # adapters: Postgres (UoW/repos), RabbitMQ (consumer, outbox relay), config, logs, telemetry
+  presentation/    # GET /health
+  container.py     # composition root (injeção de dependências)
+  main.py          # FastAPI + lifespan
+migrations/        # SQL executado no start (tenant_quota, reservations, processed_messages, outbox)
+contracts/schemas/ # cópia dos schemas usados (o build do compose usa esta pasta como contexto)
+tests/             # testes unitários do caso de uso com fakes em memória
+```
+
+Regras:
+- `AudioReceived`: reserva 1 crédito atomicamente (`UPDATE ... WHERE used < quota_limit`); se indisponível, publica `CreditRejected`. Pedido repetido com o mesmo `requestId` republica `CreditReserved` com o mesmo `reservationId`.
+- `CreditReleaseRequested`: libera 1 crédito apenas se a reserva estiver `RESERVED` (sem devolução dupla).
+- `TicketOpened`: marca a reserva `RESERVED` como `CONSUMED`.
+
+```bash
+pip install -r requirements.txt pytest && pytest -q
+```
