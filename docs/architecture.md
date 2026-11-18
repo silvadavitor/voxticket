@@ -14,7 +14,7 @@
  ═══════════════════════════╪══════════ RabbitMQ (exchange `events`) ══════════════════════════╪═══
         │                   │                │                   │                             │
   quota-service      ticket-service   categorization-svc   notification-svc        transcription-worker ×3
-     Java                Java              Python                C#                        Python
+     Java                Java                Go                  C#                        Python
    [Postgres]          [Postgres]        [Postgres]          [Postgres]                 [Postgres]
                        (request-service também tem o seu Postgres)
 
@@ -30,7 +30,7 @@
 | request-service | C# (ASP.NET Core) | API (202 + status), upload S3, **orquestrador da saga** (estados + timeout) | `requests` |
 | quota-service | Java (Spring Boot) | créditos: reservar / consumir / liberar (R2) | `quota` |
 | transcription-worker | Python | baixa áudio do S3 e transcreve; 3 réplicas (R4, R5) | `transcription` |
-| categorization-service | Python | categoria + prioridade | `categorization` |
+| categorization-service | Go | categoria + prioridade | `categorization` |
 | ticket-service | Java (Spring Boot) | abre chamado, único por `requestId` | `ticket` |
 | notification-service | C# | e-mail simulado (log + tabela) | `notification` |
 

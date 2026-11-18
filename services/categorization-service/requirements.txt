@@ -1,8 +1,0 @@
-fastapi==0.164.0
-uvicorn==0.54.0
-aio-pika==10.2.3
-asyncpg==0.32.0
-boto3==1.44.5
-jsonschema==4.26.0
-opentelemetry-distro==0.66b2
-opentelemetry-exporter-otlp==1.45.2

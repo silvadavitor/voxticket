@@ -11,7 +11,7 @@ Cada unit é desenvolvida e testada de forma independente, contra os contratos e
 | quota-service | `services/quota-service` | Java | _a definir_ | contracts |
 | ticket-service | `services/ticket-service` | Java | _a definir_ | contracts |
 | transcription-worker | `services/transcription-worker` | Python | _a definir_ | contracts, infra (S3) |
-| categorization-service | `services/categorization-service` | Python | _a definir_ | contracts |
+| categorization-service | `services/categorization-service` | Go | Vitor da Silva | contracts |
 
 > Atribuam os donos aqui e no README de cada serviço. Sugestão: quem pega um serviço de uma
 > linguagem pega o outro da mesma linguagem, porque a "biblioteca base" (envelope, outbox,

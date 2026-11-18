@@ -64,7 +64,7 @@ make reset       # derruba e apaga os dados locais
 | quota-service (recurso escasso) | Java | _a definir_ | [services/quota-service](services/quota-service/) |
 | ticket-service | Java | _a definir_ | [services/ticket-service](services/ticket-service/) |
 | transcription-worker (×3 réplicas) | Python | _a definir_ | [services/transcription-worker](services/transcription-worker/) |
-| categorization-service | Python | Vitor da Silva | [services/categorization-service](services/categorization-service/) |
+| categorization-service | Go | Vitor da Silva | [services/categorization-service](services/categorization-service/) |
 | Infra (Terraform/Terragrunt) + Observabilidade | HCL | Vitor | [infra](infra/), [observability](observability/) |
 
 ## Como subir localmente (passo a passo)
@@ -205,7 +205,7 @@ Um push com a infra destruída **não recria nada**; criar é sempre manual. A c
 
 | Exigência | Como foi atendida | Onde |
 |---|---|---|
-| ≥ 4 microsserviços, ≥ 3 linguagens | 6 serviços em C#, Java e Python | [services/](services/) |
+| ≥ 4 microsserviços, ≥ 3 linguagens | 6 serviços em C#, Java, Python e Go | [services/](services/) |
 | Mensageria assíncrona + contratos | RabbitMQ (Amazon MQ na AWS); AsyncAPI + JSON Schema, envelope único | [contracts/](contracts/), [ADR-002](docs/adr/ADR-002-mensageria-rabbitmq.md) |
 | ≥ 3 categorias de nuvem | Mensageria, armazenamento de objetos (S3), segredos (Secrets Manager), banco (RDS), computação (ECS) | [docs/architecture.md](docs/architecture.md#nuvem) |
 | Banco por serviço | Postgres próprio por serviço; na AWS, um database e um usuário isolados por serviço | [ADR-003](docs/adr/ADR-003-postgres-database-por-servico.md) |
