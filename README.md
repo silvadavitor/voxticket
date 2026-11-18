@@ -111,23 +111,35 @@ Se algum `*-init` saiu com código diferente de 0: `docker compose logs infra-in
 ### 3. Subir os microsserviços
 
 ```bash
-docker compose --profile apps up -d --build
-```
-
-Só o seu serviço (e o que ele precisa):
-
-```bash
-docker compose --profile apps up -d --build quota-service
+make up                         # infra + todos os serviços que JÁ têm Dockerfile
+make svc s=quota-service        # só o seu serviço (e o que ele precisa: Postgres dele, RabbitMQ, MiniStack)
 ```
 
 Conferir:
 
 ```bash
-docker compose --profile apps ps
-curl localhost:8080/health      # request-service
-curl localhost:8081/health      # quota-service   (ticket 8082, categorization 8083, notification 8084, worker 8090-8092)
-docker compose --profile apps logs -f quota-service   # logs ao vivo (Ctrl+C sai)
+make ps
+curl localhost:8081/health      # quota (request 8080, ticket 8082, categorization 8083, notification 8084, worker 8090-8092)
+make logs s=quota-service       # logs ao vivo (Ctrl+C sai)
 ```
+
+### Testar o SEU serviço sozinho (sem os outros prontos)
+
+Publique na mão o evento que o seu serviço consome. O envelope é montado pelo script, e sem arquivo ele
+gera um payload de exemplo válido:
+
+```bash
+make publish t=AudioReceived                  # quota-service
+make publish t=TicketRequested                # ticket-service
+make publish t=CategorizationRequested        # categorization-service
+make publish t=TranscriptionRequested         # transcription-worker
+make publish t=TicketOpened                   # notification / quota / request
+make publish t=AudioReceived f=meu.json       # payload próprio (só o "payload", sem envelope)
+REQUEST_ID=<uuid> MESSAGE_ID=<uuid> make publish t=AudioReceived   # repetir a mesma mensagem (teste do F3)
+```
+
+O que o seu serviço publicar aparece nas filas dos consumidores no painel do RabbitMQ
+(http://localhost:15672 → Queues), mesmo que esses serviços ainda não existam.
 
 ### 4. Testar o fluxo
 
