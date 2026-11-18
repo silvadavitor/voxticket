@@ -49,6 +49,17 @@ jobs:
           - categorization-service
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: hashFiles(format('services/{0}/requirements-dev.txt', matrix.service)) != ''
+        with:
+          python-version: "3.13"
+      - name: Testes Python (se o serviço tiver)
+        if: hashFiles(format('services/{0}/requirements-dev.txt', matrix.service)) != ''
+        working-directory: services/${{ matrix.service }}
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -q -r requirements-dev.txt
+          .venv/bin/pytest -q
       - name: docker build
         run: |
           if [ -f services/${{ matrix.service }}/Dockerfile ]; then

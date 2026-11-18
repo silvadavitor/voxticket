@@ -64,7 +64,7 @@ make reset       # derruba e apaga os dados locais
 | quota-service (recurso escasso) | Java | _a definir_ | [services/quota-service](services/quota-service/) |
 | ticket-service | Java | _a definir_ | [services/ticket-service](services/ticket-service/) |
 | transcription-worker (×3 réplicas) | Python | _a definir_ | [services/transcription-worker](services/transcription-worker/) |
-| categorization-service | Python | _a definir_ | [services/categorization-service](services/categorization-service/) |
+| categorization-service | Python | Vitor da Silva | [services/categorization-service](services/categorization-service/) |
 | Infra (Terraform/Terragrunt) + Observabilidade | HCL | Vitor | [infra](infra/), [observability](observability/) |
 
 ## Como subir localmente (passo a passo)

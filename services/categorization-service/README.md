@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Linguagem** | Python |
-| **Responsável** | _a definir_ |
+| **Responsável** | Vitor da Silva |
 | **Banco** | Postgres próprio (local: container `postgres-categorization`; AWS: database `categorization` no RDS), credenciais no Secrets Manager: `voxticket/<env>/db/categorization-service` |
 | **Fila** | `categorization-service.q` (DLQ `categorization-service.dlq`) |
 
@@ -52,3 +52,45 @@ Schemas em [`contracts/schemas/`](../../contracts/schemas/). Não altere um cont
 | `DB_SECRET_ID` | `voxticket/local/db/categorization-service` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` |
 | `OTEL_SERVICE_NAME` | `categorization-service` |
+
+## Estrutura do código
+
+```
+app/
+├── main.py              # FastAPI (/health) + tarefas em background
+├── settings.py          # config só por variável de ambiente
+├── db.py                # Secrets Manager → pool asyncpg → schema.sql (retry, nunca derruba o processo)
+├── aws.py               # clientes S3 / Secrets Manager (MiniStack ou AWS via AWS_ENDPOINT_URL)
+├── classifier.py        # palavras-chave → categoria, prioridade, confiança
+├── handlers.py          # CategorizationRequested → lê transcrição no S3 → AudioCategorized
+├── schema.sql           # categorizations, processed_messages, outbox
+├── contracts/           # cópia dos JSON Schemas usados (scripts/sync-contracts.sh)
+└── messaging/
+    ├── broker.py        # aio-pika connect_robust (R6)
+    ├── envelope.py      # envelope + validação contra o contrato (inclui format uuid/date-time)
+    ├── consumer.py      # padrão R1: processed_messages + efeito + outbox, ACK depois do COMMIT
+    └── outbox.py        # relay com publisher confirms + gauge voxticket.outbox.pending
+tests/                   # classificador, contratos, /health sem infraestrutura
+```
+
+**Formato da transcrição** que este serviço lê em `transcripts/{requestId}.json` (combinar com o
+transcription-worker): `{"requestId": "...", "text": "..."}`.
+
+## Rodando
+
+```bash
+# testes (sem Docker)
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest
+
+# no compose, junto com as dependências (MiniStack, RabbitMQ, Postgres próprio)
+docker compose --profile apps up -d --build categorization-service
+curl localhost:8083/health
+```
+
+Se mudar um contrato em `contracts/`, rode `scripts/sync-contracts.sh` (o teste `test_contracts_em_dia`
+falha enquanto a cópia estiver desatualizada).
+
+Verificado em 18/11 no compose:
+- caminho feliz: TECNICO / CRITICAL, `AudioCategorized` publicado na fila do request-service;
+- mesma mensagem 5×: um efeito só, com 5 logs `duplicate, skipped`;
+- payload inválido: 3 reentregas e depois a DLQ, com a fila principal seguindo vazia.
