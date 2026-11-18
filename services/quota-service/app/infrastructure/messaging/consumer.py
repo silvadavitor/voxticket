@@ -13,6 +13,7 @@ from app.application.process_quota import ProcessQuotaCommand, ProcessQuotaUseCa
 from app.infrastructure.messaging.broker_worker import MAX_BACKOFF_SECONDS, BrokerWorker
 from app.infrastructure.messaging.contract_validator import ContractValidator, InvalidEnvelope
 from app.infrastructure.observability.logging import message_log_context
+from app.infrastructure.observability.telemetry import QuotaTelemetry
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -30,11 +31,13 @@ class QuotaConsumer(BrokerWorker):
         queue_name: str,
         validator: ContractValidator,
         use_case: ProcessQuotaUseCase,
+        telemetry: QuotaTelemetry,
     ) -> None:
         super().__init__(broker_url)
         self._queue_name = queue_name
         self._validator = validator
         self._use_case = use_case
+        self._telemetry = telemetry
 
     async def on_connected(self, connection: AbstractRobustConnection) -> None:
         channel = await connection.channel()
@@ -74,6 +77,7 @@ class QuotaConsumer(BrokerWorker):
         while True:
             try:
                 result = await self._use_case.execute(command)
+                self._telemetry.record(result.outcome, command.tenant_id)
                 logger.info("quota event processed: %s", result.outcome.value)
                 return
             except asyncio.CancelledError:

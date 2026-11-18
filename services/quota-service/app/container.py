@@ -10,6 +10,7 @@ from app.infrastructure.messaging.broker_worker import MAX_BACKOFF_SECONDS, Brok
 from app.infrastructure.messaging.consumer import QuotaConsumer
 from app.infrastructure.messaging.contract_validator import ContractValidator
 from app.infrastructure.messaging.outbox_relay import OutboxRelay
+from app.infrastructure.observability.telemetry import QuotaTelemetry, run_outbox_gauge_loop
 from app.infrastructure.persistence.database import Database
 from app.infrastructure.persistence.postgres import PostgresUnitOfWorkFactory
 
@@ -26,6 +27,7 @@ class QuotaServiceContainer(Stoppable):
         self.settings = settings
         self.database = Database(settings)
         self.validator = ContractValidator(settings.contracts_dir, INCOMING_EVENTS)
+        self.telemetry = QuotaTelemetry()
         self._workers: list[BrokerWorker] = []
         self._tasks: list[asyncio.Task] = []
 
@@ -52,10 +54,16 @@ class QuotaServiceContainer(Stoppable):
         use_case = ProcessQuotaUseCase(PostgresUnitOfWorkFactory(self.database.pool))
         broker_url = self.settings.resolved_broker_url()
         self._workers = [
-            QuotaConsumer(broker_url, self.settings.broker_queue, self.validator, use_case),
+            QuotaConsumer(broker_url, self.settings.broker_queue, self.validator, use_case, self.telemetry),
             OutboxRelay(broker_url, self.settings.broker_exchange, self.database.pool),
         ]
         self._tasks.extend(asyncio.create_task(w.run(), name=w.name) for w in self._workers)
+        self._tasks.append(
+            asyncio.create_task(
+                run_outbox_gauge_loop(self.telemetry, self.database.pool, self),
+                name="outbox-gauge",
+            )
+        )
 
     async def _connect_database(self) -> None:
         delay = 1
