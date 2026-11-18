@@ -59,7 +59,7 @@ regredir. Se fosse preciso ordem por pedido: particionar por `requestId` (consis
 
 | Bônus | Plano | Dono |
 |---|---|---|
-| OpenTelemetry (tracing ponta a ponta) | SDK OTel nas 3 linguagens, `traceparent` no header AMQP, Collector → Datadog/Jaeger | infra/observabilidade + todos |
+| OpenTelemetry (tracing ponta a ponta) | SDK OTel nas 3 linguagens, `traceparent` no header AMQP, Collector → Grafana LGTM (traces, métricas, logs, dashboard) | infra/observabilidade + todos |
 | IaC que recria o ambiente | Terraform + Terragrunt (MiniStack e AWS) | infra |
 | CQRS | `request_status_view` alimentada por eventos | request-service |
 | Versionamento de eventos | `AudioCategorized` v1 e v2 convivendo | categorization-service |

@@ -1,23 +1,37 @@
-# ADR-004 — OpenTelemetry com Collector; Datadog como backend (a confirmar)
+# ADR-004 — OpenTelemetry + Collector; Grafana LGTM como backend (Datadog opcional)
 
-**Status:** proposto · 17/11/2026. Falta confirmar o acesso à conta Datadog de estudo.
+**Status:** aceito · 18/11/2026 (revisa a versão de 17/11, que tinha Datadog como principal)
+
+## Contexto
+Precisamos de traces, métricas e logs para demonstrar os cenários de falha (F1–F8) e o bônus de
+tracing distribuído. A conta Datadog e o uso da AWS ainda não estão confirmados, e a demo não pode
+depender deles.
 
 ## Decisão
-- Os serviços usam **só o SDK OpenTelemetry** (traces, métricas e logs) e exportam OTLP para um
-  **OTel Collector**. Ninguém usa SDK ou agente Datadog no código.
-- O Collector decide o backend: **Datadog** (exporter `datadog`, chave em `DD_API_KEY`) ou **Jaeger**
-  (reserva local, sem conta). A troca é por `OTEL_BACKEND=datadog|jaeger`.
-- Propagação W3C `traceparent` no header das mensagens AMQP: um trace atravessa todos os serviços
-  (bônus +0,2).
-- Dashboards e monitores do Datadog ficam em Terraform (`infra/modules/datadog`), desligados até
-  existir `DD_API_KEY`/`DD_APP_KEY`.
+- Os serviços usam **só o SDK OpenTelemetry** e exportam OTLP para um **OTel Collector**.
+- Backend principal: **`grafana/otel-lgtm`**, que reúne Grafana, Tempo (traces), Prometheus (métricas)
+  e Loki (logs) num container. O dashboard *VoxTicket — Saga* vem embutido na imagem
+  (`infra/docker/lgtm.Dockerfile`).
+- O collector também lê a **API de management do RabbitMQ**: profundidade de cada fila e DLQ aparece
+  sem código nos serviços.
+- **Datadog** fica como backend alternativo (`OTEL_BACKEND=datadog`), com dashboard e monitores em
+  Terraform. Está em standby.
+- Propagação W3C `traceparent` nos headers AMQP, inclusive pelo outbox (coluna `outbox.traceparent`).
 
 ## Por quê
-- Neutro de fornecedor: se a conta Datadog não estiver disponível no dia, a demo de tracing roda
-  com Jaeger trocando uma variável.
-- As 3 linguagens têm SDK OTel estável.
-- O Datadog dá dashboards, correlação de logs com trace e monitores (DLQ, outbox parado, compensações).
+- **Neutro de fornecedor:** trocar de backend é trocar a config do collector; nenhum serviço muda.
+- **Funciona offline e sem conta:** a demo roda inteira na máquina.
+- **Os três sinais correlacionados:** do log se pula para o trace pelo `trace_id`, e no trace se acha
+  um pedido pelo `requestId`.
 
-## Convenções
-Ver [`observability/README.md`](../../observability/README.md): atributos obrigatórios (`messaging.message.id`,
-`app.request_id`, `app.tenant_id`) e métricas customizadas usadas pelos dashboards.
+## Hospedagem na AWS (quando for liberada)
+
+| Opção | Prós | Contras |
+|---|---|---|
+| Amazon Managed Grafana + Managed Prometheus + X-Ray + CloudWatch | gerenciado | exige IAM Identity Center; ~US$ 9 por usuário; sem Tempo/Loki, então a experiência fica diferente da local |
+| Grafana Cloud (free tier) | grátis, sem operação | conta externa, fora do Terraform |
+| **Mesma imagem LGTM no ECS** (escolhida) | **o mesmo Grafana local e na nuvem**, tudo em Terraform | ~US$ 1,20/dia; dados efêmeros (aceitável para a demo) |
+
+## Alternativas descartadas
+- **Jaeger:** só traces, sem métricas nem logs.
+- **SDK do Datadog no código:** prende os serviços a um fornecedor e quebra a demo sem a conta.

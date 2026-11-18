@@ -19,8 +19,15 @@ x-app-env: &app-env
   BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
   BROKER_EXCHANGE: events
   DB_PORT: "5432"
+  # OpenTelemetry: variáveis padrão da spec, valem para .NET, Java e Python
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${ENVIRONMENT:-local}
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${ENVIRONMENT:-local},service.namespace=voxticket
+  OTEL_PROPAGATORS: tracecontext,baggage
+  OTEL_TRACES_SAMPLER: parentbased_always_on
+  OTEL_METRIC_EXPORT_INTERVAL: "10000"
+  OTEL_LOGS_EXPORTER: otlp
+  OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
 
 # Um Postgres por serviço (banco por serviço). Usuário/senha/db iguais ao segredo
 # voxticket/local/db/<servico> criado pelo infra-init.
@@ -177,11 +184,14 @@ services:
 
   # ============================ observabilidade ============================
 
+  # Recebe OTLP dos serviços e lê a profundidade das filas do RabbitMQ.
+  # OTEL_BACKEND=local (padrão) → stack LGTM abaixo | datadog → conta Datadog (DD_API_KEY)
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.165.0
-    command: ["--config=/etc/otelcol/config.${OTEL_BACKEND:-jaeger}.yaml"]
+    command: ["--config=/etc/otelcol/config.${OTEL_BACKEND:-local}.yaml"]
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-local}
+      LGTM_OTLP_ENDPOINT: lgtm:4317
       DD_API_KEY: ${DD_API_KEY:-}
       DD_SITE: ${DD_SITE:-datadoghq.com}
       RABBITMQ_MGMT_URL: http://rabbitmq:15672
@@ -193,12 +203,18 @@ services:
       - "4317:4317"
       - "4318:4318"
     depends_on:
-      - jaeger
+      - lgtm
 
-  jaeger:
-    image: jaegertracing/jaeger:2.23.0
+  # Grafana + Tempo (traces) + Prometheus (métricas) + Loki (logs), dashboard VoxTicket embutido.
+  # http://localhost:3000 (local: sem login)
+  lgtm:
+    build:
+      context: .
+      dockerfile: infra/docker/lgtm.Dockerfile
     ports:
-      - "16686:16686"
+      - "3000:3000"
+    volumes:
+      - lgtm-data:/data
 
   # ============================ microsserviços ============================
   # Cada dono: crie services/<servico>/Dockerfile. Contrato de env em services/<servico>/README.md.
@@ -324,3 +340,4 @@ volumes:
   postgres-notification-data:
   tfstate:
   tfplugins:
+  lgtm-data:

@@ -14,7 +14,7 @@ Passo a passo do deploy AWS: [`infra/README.md`](../infra/README.md).
 ## Runbook da apresentação
 
 1. `docker compose ps`: todos `healthy`.
-2. Abrir: painel do RabbitMQ, Datadog (ou Jaeger), terminal com `psql` e logs filtrados por `correlationId`.
+2. Abrir: painel do RabbitMQ, Grafana (`make grafana`: dashboard da saga, traces e logs) e um terminal com `psql`.
 3. O professor escolhe o cenário: `scripts/failures/F<n>.sh`, depois as consultas de
    `scripts/failures/sql/F<n>.sql`.
 

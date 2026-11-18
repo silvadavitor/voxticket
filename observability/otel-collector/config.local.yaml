@@ -1,0 +1,66 @@
+# OTel Collector LOCAL → grafana/otel-lgtm (Grafana + Tempo + Prometheus + Loki), http://localhost:3000
+# Env: ENVIRONMENT, RABBITMQ_MGMT_URL, RABBITMQ_USER, RABBITMQ_PASSWORD, LGTM_OTLP_ENDPOINT
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  # profundidade das filas e DLQs (métrica rabbitmq.message.current), sem tocar no código dos serviços
+  rabbitmq:
+    endpoint: ${env:RABBITMQ_MGMT_URL}
+    username: ${env:RABBITMQ_USER}
+    password: ${env:RABBITMQ_PASSWORD}
+    collection_interval: 10s
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:ENVIRONMENT}
+        action: upsert
+  # o nome da fila vem como atributo de RECURSO; vira label do ponto para dar "by (queue)" no Prometheus
+  transform/rabbitmq:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["queue"], resource.attributes["rabbitmq.queue.name"]) where resource.attributes["rabbitmq.queue.name"] != nil
+  # nunca exportar credenciais que eventualmente apareçam em atributos
+  attributes/redact:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: db.connection_string
+        action: delete
+  batch: {}
+
+exporters:
+  otlp/lgtm:
+    endpoint: ${env:LGTM_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes/redact, batch]
+      exporters: [otlp/lgtm]
+    metrics:
+      receivers: [otlp, rabbitmq]
+      processors: [memory_limiter, resource, transform/rabbitmq, batch]
+      exporters: [otlp/lgtm]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes/redact, batch]
+      exporters: [otlp/lgtm]

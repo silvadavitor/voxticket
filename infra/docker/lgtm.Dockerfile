@@ -1,0 +1,6 @@
+# Stack de observabilidade (Grafana + Tempo + Prometheus + Loki) com o dashboard do VoxTicket embutido.
+# Mesma imagem local (docker compose) e na AWS (ECS). Grafana na porta 3000, OTLP em 4317/4318.
+FROM grafana/otel-lgtm:0.40.0
+
+COPY observability/grafana/dashboards.yaml /otel-lgtm/grafana/conf/provisioning/dashboards/voxticket.yaml
+COPY observability/grafana/voxticket.json  /otel-lgtm/grafana/conf/provisioning/dashboards/voxticket/voxticket.json

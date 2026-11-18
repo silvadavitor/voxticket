@@ -127,4 +127,4 @@ Tratamento de erro:
 | Mensageria | RabbitMQ (container) | Amazon MQ for RabbitMQ | ADR-002 |
 | Banco de dados | 1 Postgres (container) por serviço | RDS Postgres (database + usuário por serviço) | ADR-003 |
 | Computação | docker compose | ECS Fargate | ADR-001 |
-| Observabilidade | OTel Collector → Jaeger/Datadog | OTel Collector (sidecar) → Datadog | ADR-004 |
+| Observabilidade | OTel Collector → Grafana LGTM (Tempo, Prometheus, Loki) | mesma stack LGTM no ECS (standby) ou Datadog | ADR-004 |
