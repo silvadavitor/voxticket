@@ -43,6 +43,9 @@ locals {
       alb_path_patterns = []
       desired_count     = 3           # R4: réplicas concorrentes na mesma fila
       s3_access         = "readwrite" # lê o áudio, grava transcripts/
+      # Whisper (modelo base, int8) precisa de mais CPU e ~1 GB de RAM
+      cpu    = 1024
+      memory = 2048
       # bônus: autoescala pelo backlog da fila (mínimo 2 mantém o R4)
       autoscaling = {
         min              = 2
@@ -51,11 +54,10 @@ locals {
         backlog_per_task = 5
       }
       environment = {
-        TRANSCRIBE_LATENCY_MS_MIN = get_env("TRANSCRIBE_LATENCY_MS_MIN", "500")
-        TRANSCRIBE_LATENCY_MS_MAX = get_env("TRANSCRIBE_LATENCY_MS_MAX", "3000")
-        TRANSCRIBE_FAILURE_RATE   = get_env("TRANSCRIBE_FAILURE_RATE", "0.1")
+        TRANSCRIBE_LATENCY_MS_MIN = get_env("TRANSCRIBE_LATENCY_MS_MIN", "0")
+        TRANSCRIBE_LATENCY_MS_MAX = get_env("TRANSCRIBE_LATENCY_MS_MAX", "0")
+        TRANSCRIBE_FAILURE_RATE   = get_env("TRANSCRIBE_FAILURE_RATE", "0")
         TRANSCRIBE_MAX_ATTEMPTS   = get_env("TRANSCRIBE_MAX_ATTEMPTS", "3")
-        TRANSCRIBER_MODE          = "fake"
       }
     }
     "categorization-service" = {
@@ -186,6 +188,8 @@ inputs = {
         port              = 8080
         public            = cfg.public
         alb_path_patterns = cfg.alb_path_patterns
+        cpu               = try(cfg.cpu, 256)
+        memory            = try(cfg.memory, 512)
         desired_count     = cfg.desired_count
         s3_access         = cfg.s3_access
         autoscaling       = cfg.autoscaling

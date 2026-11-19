@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "AudioTranscribed.v1.schema.json",
+  "title": "AudioTranscribed v1",
+  "description": "Transcrição concluída e gravada em transcripts/{requestId}.json. Produtor: transcription-worker. Consumidores: request-service.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "AudioTranscribed"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "transcriptKey"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "transcriptKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chave do objeto no S3 (claim-check)"
+        },
+        "processedBy": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

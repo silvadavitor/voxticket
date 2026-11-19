@@ -1,0 +1,83 @@
+"""Composition root: monta dependências e controla o ciclo de vida."""
+from __future__ import annotations
+
+import asyncio
+import logging
+
+from app.application.open_ticket import OpenTicketUseCase
+from app.domain.policy import TicketOpeningPolicy
+from app.infrastructure.config.settings import Settings
+from app.infrastructure.messaging.broker_worker import MAX_BACKOFF_SECONDS, BrokerWorker, Stoppable
+from app.infrastructure.messaging.consumer import TicketRequestedConsumer
+from app.infrastructure.messaging.contract_validator import ContractValidator
+from app.infrastructure.messaging.outbox_relay import OutboxRelay
+from app.infrastructure.persistence.database import Database
+from app.application.ports import TicketQueries
+from app.infrastructure.persistence.postgres import PostgresTicketQueries, PostgresUnitOfWorkFactory
+
+logger = logging.getLogger(__name__)
+
+INCOMING_EVENTS = frozenset({"TicketRequested"})
+
+
+class TicketServiceContainer(Stoppable):
+    """Sobe banco e workers em background; nunca derruba o processo se broker/DB caírem."""
+
+    def __init__(self, settings: Settings) -> None:
+        super().__init__()
+        self.settings = settings
+        self.database = Database(settings)
+        self.validator = ContractValidator(settings.contracts_dir, INCOMING_EVENTS)
+        self._workers: list[BrokerWorker] = []
+        self._tasks: list[asyncio.Task] = []
+
+    @property
+    def broker_up(self) -> bool:
+        return bool(self._workers) and all(worker.connected for worker in self._workers)
+
+    def ticket_queries(self) -> TicketQueries:
+        """Leitura dos chamados; RuntimeError enquanto o banco não conectou."""
+        return PostgresTicketQueries(self.database.pool)
+
+    async def start(self) -> None:
+        self._tasks.append(asyncio.create_task(self._bootstrap(), name="bootstrap"))
+
+    async def stop(self) -> None:
+        self.request_stop()
+        for worker in self._workers:
+            worker.request_stop()
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await self.database.close()
+
+    async def _bootstrap(self) -> None:
+        await self._connect_database()
+        if self.stopping:
+            return
+        use_case = OpenTicketUseCase(
+            PostgresUnitOfWorkFactory(self.database.pool),
+            TicketOpeningPolicy(self.settings.allowed_categories),
+        )
+        broker_url = self.settings.resolved_broker_url()
+        self._workers = [
+            TicketRequestedConsumer(broker_url, self.settings.broker_queue, self.validator, use_case),
+            OutboxRelay(broker_url, self.settings.broker_exchange, self.database.pool),
+        ]
+        self._tasks.extend(asyncio.create_task(w.run(), name=w.name) for w in self._workers)
+
+    async def _connect_database(self) -> None:
+        delay = 1
+        while not self.stopping:
+            try:
+                await self.database.connect()
+                await self.database.migrate()
+                logger.info("database ready")
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("database unavailable; retrying in %ss", delay)
+                await self.database.close()
+                await self.sleep(delay)
+                delay = min(delay * 2, MAX_BACKOFF_SECONDS)
