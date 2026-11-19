@@ -40,3 +40,6 @@ venv/
 # atalhos locais de operação da AWS (o caminho oficial são os workflows do GitHub Actions)
 infra/scripts/aws.sh
 infra/scripts/push-images.sh
+
+# Visual Studio
+.vs/
