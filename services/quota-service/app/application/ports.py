@@ -6,6 +6,21 @@ from types import TracebackType
 
 from app.domain.events import IntegrationEvent
 from app.domain.reservation import Reservation
+from app.domain.tenant import Tenant
+
+
+class TenantAdmin(ABC):
+    """Cadastro dos clientes e do limite de créditos (API /tenants). Fora da saga."""
+
+    @abstractmethod
+    async def list(self) -> list[Tenant]: ...
+
+    @abstractmethod
+    async def get(self, tenant_id: str) -> Tenant | None: ...
+
+    @abstractmethod
+    async def set_limit(self, tenant_id: str, quota_limit: int) -> Tenant | None:
+        """Cria o cliente ou muda o limite. ``None`` se o limite ficaria abaixo do já usado."""
 
 
 class QuotaRepository(ABC):

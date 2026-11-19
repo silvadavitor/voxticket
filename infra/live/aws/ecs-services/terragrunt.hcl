@@ -30,8 +30,8 @@ locals {
       }
     }
     "quota-service" = {
-      public            = false
-      alb_path_patterns = []
+      public            = true
+      alb_path_patterns = ["/tenants", "/tenants/*"] # cadastro de clientes
       desired_count     = 1
       s3_access         = "none"
       autoscaling       = null

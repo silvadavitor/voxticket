@@ -12,7 +12,8 @@ from app.infrastructure.messaging.contract_validator import ContractValidator
 from app.infrastructure.messaging.outbox_relay import OutboxRelay
 from app.infrastructure.observability.telemetry import QuotaTelemetry, run_outbox_gauge_loop
 from app.infrastructure.persistence.database import Database
-from app.infrastructure.persistence.postgres import PostgresUnitOfWorkFactory
+from app.application.ports import TenantAdmin
+from app.infrastructure.persistence.postgres import PostgresTenantAdmin, PostgresUnitOfWorkFactory
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ class QuotaServiceContainer(Stoppable):
     @property
     def broker_up(self) -> bool:
         return bool(self._workers) and all(worker.connected for worker in self._workers)
+
+    def tenant_admin(self) -> TenantAdmin:
+        """Cadastro de clientes; RuntimeError enquanto o banco não conectou."""
+        return PostgresTenantAdmin(self.database.pool)
 
     async def start(self) -> None:
         self._tasks.append(asyncio.create_task(self._bootstrap(), name="bootstrap"))

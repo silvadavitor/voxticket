@@ -1,6 +1,7 @@
 // VoxTicket: página estática que só conversa com a API (contrato em contracts/openapi.yaml).
 //   /api/audios*  → request-service   (pedidos e estado da saga)
 //   /api/tickets* → ticket-service    (chamados)
+//   /api/tenants* → quota-service     (clientes e créditos)
 // Configuração em config.js, gerado pelo Terraform no deploy.
 
 const CONFIG = Object.assign(
@@ -61,9 +62,22 @@ async function checkTicketService() {
   }
 }
 
+async function checkQuotaService() {
+  const chip = $("#svc-quota");
+  try {
+    await api("/tenants");
+    chip.textContent = "quota-service online";
+    chip.className = "chip chip-ok";
+  } catch {
+    chip.textContent = "quota-service offline";
+    chip.className = "chip chip-bad";
+  }
+}
+
 function checkAll() {
   checkService("/health", "#svc-request", "request-service");
   checkTicketService();
+  checkQuotaService();
 }
 
 // ---------------------------------------------------------------- pedidos
@@ -156,6 +170,60 @@ async function refreshTickets() {
   }
 }
 
+// ---------------------------------------------------------------- clientes
+
+async function setTenantLimit(tenantId, quotaLimit) {
+  const r = await fetch(`${CONFIG.apiBase}/tenants/${encodeURIComponent(tenantId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quotaLimit }),
+  });
+  if (r.status === 409) throw new Error("o limite não pode ficar abaixo dos créditos já usados");
+  if (!r.ok) throw new Error(`a API respondeu ${r.status}`);
+  return r.json();
+}
+
+async function refreshTenants() {
+  try {
+    const tenants = await api("/tenants");
+    $("#tenants-list").innerHTML = tenants.map((t) => `<option value="${esc(t.tenantId)}">`).join("");
+    if (state.tab !== "clientes") return;
+    $("#tenants-body").innerHTML = tenants.map((t) => {
+      const pct = t.quotaLimit ? Math.min(100, Math.round((t.used / t.quotaLimit) * 100)) : 100;
+      return `
+      <tr>
+        <td><b>${esc(t.tenantId)}</b></td>
+        <td>${t.quotaLimit}</td>
+        <td>${t.used}</td>
+        <td>${t.available ? t.available : '<span class="chip chip-bad">0</span>'}</td>
+        <td><div class="bar ${t.available ? "" : "full"}"><span style="width:${pct}%"></span></div></td>
+        <td><button class="link-btn small" type="button" data-edit="${esc(t.tenantId)}" data-limit="${t.quotaLimit}">editar</button></td>
+      </tr>`;
+    }).join("");
+    $("#tenants-table").hidden = tenants.length === 0;
+    $("#tenants-empty").hidden = tenants.length > 0;
+    $("#tenants-empty").textContent = "Nenhum cliente cadastrado.";
+  } catch {
+    if (state.tab !== "clientes") return;
+    $("#tenants-table").hidden = true;
+    $("#tenants-empty").hidden = false;
+    $("#tenants-empty").textContent = "quota-service fora do ar: suba os serviços (make up).";
+  }
+}
+
+async function saveTenant(e) {
+  e.preventDefault();
+  const id = $("#tenant-id").value.trim();
+  const limit = Number($("#tenant-limit").value);
+  try {
+    const t = await setTenantLimit(id, limit);
+    $("#tenant-msg").textContent = `${t.tenantId}: limite ${t.quotaLimit}, ${t.available} disponíveis`;
+    refreshTenants();
+  } catch (err) {
+    $("#tenant-msg").textContent = `Erro: ${err.message}`;
+  }
+}
+
 // ---------------------------------------------------------------- gravação e envio
 
 function setAudio(blob, name) {
@@ -222,7 +290,8 @@ async function send() {
 
 async function race() {
   const n = Math.min(Math.max(Number($("#race-n").value) || 1, 1), 200);
-  const tenant = $("#race-tenant").value.trim() || "tenant-f5";
+  const quota = Math.min(Math.max(Number($("#race-quota").value) || 0, 0), 200);
+  const tenant = `corrida-${new Date().toTimeString().slice(0, 8).replaceAll(":", "")}`;
   const ids = new Set();
   const c = { sent: 0, ok: 0, rejected: 0, pending: 0 };
   const show = () => {
@@ -231,6 +300,14 @@ async function race() {
   };
   $("#btn-race").disabled = true;
   show();
+  try {
+    await setTenantLimit(tenant, quota);
+    $("#race-msg").textContent = `cliente ${tenant} criado com ${quota} créditos · disparando ${n} pedidos`;
+  } catch (e) {
+    $("#race-msg").textContent = `Erro ao criar o cliente: ${e.message}`;
+    $("#btn-race").disabled = false;
+    return;
+  }
   const silence = new Blob([new Uint8Array(1024)], { type: "audio/ogg" });
 
   await Promise.all(Array.from({ length: n }, () =>
@@ -252,6 +329,8 @@ async function race() {
 
 // ---------------------------------------------------------------- abas e inicialização
 
+const REFRESH = { pedidos: () => refreshRequests(), chamados: () => refreshTickets(), clientes: () => refreshTenants() };
+
 function showTab(tab) {
   state.tab = tab;
   document.querySelectorAll(".tab").forEach((b) => {
@@ -261,7 +340,8 @@ function showTab(tab) {
   });
   $("#tab-pedidos").hidden = tab !== "pedidos";
   $("#tab-chamados").hidden = tab !== "chamados";
-  (tab === "pedidos" ? refreshRequests : refreshTickets)();
+  $("#tab-clientes").hidden = tab !== "clientes";
+  REFRESH[tab]();
 }
 
 $("#link-grafana").href = `${CONFIG.grafanaUrl}/d/voxticket-saga`;
@@ -272,10 +352,19 @@ $("#file").addEventListener("change", (e) => { const f = e.target.files[0]; if (
 $("#btn-send").addEventListener("click", send);
 $("#btn-race").addEventListener("click", race);
 $("#tickets-tenant").addEventListener("input", refreshTickets);
+$("#tenant-form").addEventListener("submit", saveTenant);
+$("#tenants-body").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-edit]");
+  if (!b) return;
+  $("#tenant-id").value = b.dataset.edit;
+  $("#tenant-limit").value = b.dataset.limit;
+  $("#tenant-limit").focus();
+});
 
 checkAll();
 showTab("pedidos");
 setInterval(checkAll, 5000);
-setInterval(() => (state.tab === "pedidos" ? refreshRequests() : refreshTickets()), 2000);
+setInterval(() => REFRESH[state.tab](), 2000);
 refreshTickets(); // contador da aba
+refreshTenants(); // sugestões de cliente no envio
 setInterval(() => state.tab === "pedidos" && refreshTickets(), 5000);
