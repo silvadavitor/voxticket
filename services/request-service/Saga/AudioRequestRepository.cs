@@ -23,6 +23,12 @@ public sealed class AudioRequestRepository
     public Task<AudioRequest?> FindAsync(NpgsqlConnection connection, Guid id) =>
         connection.QuerySingleOrDefaultAsync<AudioRequest>("SELECT * FROM requests WHERE id=@id", new { id });
 
+    /// <summary>Pedidos mais novos primeiro (GET /audios), opcionalmente de um cliente só.</summary>
+    public Task<IEnumerable<AudioRequest>> ListAsync(NpgsqlConnection connection, string? tenantId, int limit) =>
+        connection.QueryAsync<AudioRequest>(
+            "SELECT * FROM requests WHERE (@tenantId::text IS NULL OR tenant_id = @tenantId) ORDER BY created_at DESC LIMIT @limit",
+            new { tenantId, limit });
+
     /// <summary>Lê com FOR UPDATE: duas mensagens do mesmo pedido não mudam o estado ao mesmo tempo.</summary>
     public Task<AudioRequest?> LockAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid id) =>
         connection.QuerySingleOrDefaultAsync<AudioRequest>("SELECT * FROM requests WHERE id=@id FOR UPDATE", new { id }, transaction);
