@@ -112,10 +112,18 @@ show() {
   printf '   \033[2m%s → %s\033[0m\n' "$1" "$sql"
   q "$1" "$3" | sed 's/^/   /'
 }
-# show_logs <servico> <padrão> [n] → linhas de log que provam o comportamento (só a mensagem)
+# ruído que não prova nada (log interno do Whisper, recebimento genérico)
+LOG_NOISE='VAD filter|Processing audio with|"(msg|message)": ?"received"'
+# show_logs "<servico> [servico…]" <padrão> [n] → linhas que provam o comportamento,
+# em ordem de horário e com o container de origem (mostra QUAL réplica fez o quê)
 show_logs() {
-  $COMPOSE logs --no-log-prefix "$1" 2>&1 | grep -E "$2" | tail -n "${3:-6}" \
-    | sed -E 's/.*"(msg|message)": ?"([^"]*)".*/\2/' | sed "s/^/   [$1] /"
+  # shellcheck disable=SC2086
+  $COMPOSE logs --timestamps $1 2>&1 | grep -E "$2" | grep -vE "$LOG_NOISE" \
+    | sed -E 's/^([a-z0-9-]+)[[:space:]]*\| ([0-9-]+T[0-9:]+)[^ ]* (.*)$/\2 \1 \3/' | sort | tail -n "${3:-6}" \
+    | sed -E 's/^[0-9-]+T([0-9:]+) ([a-z0-9-]+) .*"(msg|message|Message)": ?"([^"]*)".*/   \1 [\2] \4/' \
+    | awk -v off="$(date +%z)" '{ # horário do Docker vem em UTC → horário local
+        split($1, t, ":"); h = (t[1] + (substr(off,1,1)=="-" ? -1 : 1) * substr(off,2,2) + 24) % 24
+        $1 = sprintf("   %02d:%s:%s", h, t[2], t[3]); print }' || true
 }
 # watch_status <id> "<FINAL1|FINAL2>" <segundos> → imprime cada mudança de estado da saga ao vivo
 watch_status() {

@@ -24,8 +24,7 @@ show transcription "transcrição" "SELECT request_id, status, processed_by FROM
 show ticket "chamados" "SELECT count(*) AS chamados FROM tickets WHERE request_id='$ID'"
 
 step "Linha do tempo do pedido nos logs"
-$COMPOSE logs --no-log-prefix --timestamps request-service transcription-worker 2>&1 | grep "$ID" \
-  | sed -E 's/^([0-9T:-]+)\.[0-9]+Z? .*"(msg|message)": ?"([^"]*)".*/   \1  \3/' | sort | tail -10
+show_logs "request-service transcription-worker" "$ID" 12
 
 step "Resultado"
 check "pedido EXPIRED pelo timeout"               '[[ "$(api_status $ID)" == EXPIRED ]]'
