@@ -7,7 +7,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../../.."   # raiz do repo
 API=${API:-http://localhost:8080}
 MGMT=${MGMT:-http://localhost:15672}
 RMQ_AUTH="${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}"
-SAMPLE_AUDIO=${SAMPLE_AUDIO:-scripts/failures/lib/sample.ogg}   # fala real em pt-BR (o worker usa Whisper)
+# áudios de teste com fala real em pt-BR (o worker transcreve com Whisper)
+SAMPLE_AUDIO=${SAMPLE_AUDIO:-scripts/failures/lib/tec-urg.mp3}   # técnico e urgente
+ALT_AUDIO=${ALT_AUDIO:-scripts/failures/lib/finan.mp3}            # financeiro
 BUCKET=${S3_BUCKET:-voxticket-local-audios}
 COMPOSE="docker compose --profile apps"
 
@@ -39,9 +41,9 @@ val() { $COMPOSE exec -T "${PG_CONTAINER[$1]}" psql -U "$1_user" -d "$1" -tAc "$
 txt() { $COMPOSE exec -T "${PG_CONTAINER[$1]}" psql -U "$1_user" -d "$1" -tAc "$2" | tr -d '\r' | head -1; }
 
 # ---------------------------------------------------------------- API (request-service)
-# envia um áudio; imprime o requestId
+# post_audio <tenant> [arquivo]; imprime o requestId
 post_audio() {
-  curl -fsS -F "tenantId=$1" -F "file=@$SAMPLE_AUDIO" "$API/audios" | sed -E 's/.*"requestId":"([^"]+)".*/\1/'
+  curl -fsS -F "tenantId=$1" -F "file=@${2:-$SAMPLE_AUDIO}" "$API/audios" | sed -E 's/.*"requestId":"([^"]+)".*/\1/'
 }
 api_status() { curl -fsS "$API/audios/$1" 2>/dev/null | sed -E 's/.*"status":"([^"]+)".*/\1/'; }
 status()     { curl -fsS "$API/audios/$1"; echo; }

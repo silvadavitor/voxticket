@@ -28,8 +28,9 @@ Cada cenário **mostra a evidência na tela**, não só o resultado:
 | `F7-resposta-tardia.sh` | transcrição 20 s × timeout 10 s | EXPIRED, crédito devolvido 1×, transcrição DISCARDED, 0 chamados |
 | `F8-escala.sh` | 3 réplicas, 30 áudios | 3 consumidores, 30 transcrições sem duplicata, carga em ≥ 2 réplicas |
 
-Dependências: `bash`, `curl`, `jq`, `docker compose`. O áudio de teste (`lib/sample.ogg`) é fala real em
-português, porque o worker transcreve com Whisper.
+Dependências: `bash`, `curl`, `jq`, `docker compose`. Os áudios de teste são fala real em português, porque o
+worker transcreve com Whisper: `lib/tec-urg.mp3` (técnico, urgente; o padrão) e `lib/finan.mp3` (financeiro;
+alternado no F8).
 
 Tabelas e logs que os scripts consultam (se mudarem num serviço, atualizar aqui):
 

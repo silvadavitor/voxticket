@@ -13,7 +13,10 @@ say "consumidores na fila transcription-worker.q: $(consumers transcription-work
 queue_link transcription-worker.q
 
 step "Enviando $N áudios"
-for i in $(seq "$N"); do post_audio "$T" >/dev/null; printf '\r   enviados: %d/%d' "$i" "$N"; done; echo
+for i in $(seq "$N"); do
+  if (( i % 2 )); then post_audio "$T" >/dev/null; else post_audio "$T" "$ALT_AUDIO" >/dev/null; fi
+  printf '\r   enviados: %d/%d' "$i" "$N"
+done; echo
 
 step "Acompanhando a divisão do trabalho entre as réplicas"
 for _ in $(seq 100); do
