@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "CreditReserved.v1.schema.json",
+  "title": "CreditReserved v1",
+  "description": "Crédito reservado atomicamente para o pedido. Produtor: quota-service. Consumidores: request-service.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "CreditReserved"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "tenantId"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reservationId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

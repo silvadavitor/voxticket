@@ -1,0 +1,6 @@
+# Scripts rodam em containers Linux: precisam de LF mesmo em clones Windows (core.autocrlf=true).
+# Com CRLF o shebang vira "#!/bin/sh\r" e o container falha com "no such file or directory".
+*.sh   text eol=lf
+*.sql  text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
