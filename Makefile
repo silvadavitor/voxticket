@@ -43,6 +43,12 @@ down: ## para tudo e mantém os dados
 reset: ## para tudo e APAGA bancos, filas e S3 locais
 	$(COMPOSE) down -v
 
+check: ## verifica os requisitos (rápido, ~2 min): R3–R6 + F3, F4, F5, com placar no fim
+	@bash scripts/check.sh rapido
+
+check-all: ## verifica TODOS os requisitos e cenários F1–F8 (~10–15 min), com placar
+	@bash scripts/check.sh completo
+
 f%: ## roda um cenário de falha (make f5)
 	@ls scripts/failures/F$*-*.sh >/dev/null && bash scripts/failures/F$*-*.sh
 
@@ -94,4 +100,4 @@ aws-down: ## [local] destrói tudo na AWS
 	$(aws-check)
 	$(AWS_SH) down
 
-.PHONY: help env infra up svc publish ps logs down reset test grafana otel-test aws-bootstrap aws-up aws-down aws-status aws-deploy
+.PHONY: help env infra up svc publish ps logs down reset test check check-all grafana otel-test aws-bootstrap aws-up aws-down aws-status aws-deploy
