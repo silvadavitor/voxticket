@@ -3,4 +3,5 @@
 FROM grafana/otel-lgtm:0.40.0
 
 COPY observability/grafana/dashboards.yaml /otel-lgtm/grafana/conf/provisioning/dashboards/voxticket.yaml
-COPY observability/grafana/voxticket.json  /otel-lgtm/grafana/conf/provisioning/dashboards/voxticket/voxticket.json
+COPY observability/grafana/voxticket.json observability/grafana/servicos.json observability/grafana/logs.json observability/grafana/traces.json \
+     /otel-lgtm/grafana/conf/provisioning/dashboards/voxticket/
