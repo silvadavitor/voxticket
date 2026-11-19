@@ -15,8 +15,8 @@ output "broker_secret_arn" {
   value = aws_secretsmanager_secret.broker.arn
 }
 
-output "datadog_secret_arn" {
-  value = try(aws_secretsmanager_secret.datadog[0].arn, null)
+output "grafana_secret_arn" {
+  value = aws_secretsmanager_secret.grafana.arn
 }
 
 output "master_username" {

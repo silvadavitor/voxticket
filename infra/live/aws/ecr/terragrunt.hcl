@@ -9,5 +9,5 @@ terraform {
 
 inputs = {
   prefix       = include.root.locals.project
-  repositories = concat(keys(include.root.locals.databases), ["db-init", "rabbitmq-init"])
+  repositories = concat(keys(include.root.locals.databases), ["db-init", "rabbitmq-init", "lgtm"])
 }

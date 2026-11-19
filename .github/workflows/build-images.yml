@@ -32,6 +32,7 @@ jobs:
             done
             jq -cn '{name:"db-init", context:".", file:"infra/docker/db-init.Dockerfile"}'
             jq -cn '{name:"rabbitmq-init", context:".", file:"infra/docker/rabbitmq-init.Dockerfile"}'
+            jq -cn '{name:"lgtm", context:".", file:"infra/docker/lgtm.Dockerfile"}'
           } | jq -cs '{include: .}' > matrix.json
           cat matrix.json
           echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
