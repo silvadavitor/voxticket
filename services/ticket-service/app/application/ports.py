@@ -17,6 +17,17 @@ class TicketRepository(ABC):
         """Persiste o ticket; se já existir um para o ``request_id``, devolve o existente."""
 
 
+class TicketQueries(ABC):
+    """Leitura dos chamados para a API (GET /tickets). Não participa da transação de escrita."""
+
+    @abstractmethod
+    async def list(self, tenant_id: str | None, limit: int) -> list[Ticket]:
+        """Chamados mais novos primeiro, opcionalmente só de um cliente."""
+
+    @abstractmethod
+    async def get(self, ticket_id: str) -> Ticket | None: ...
+
+
 class ProcessedMessageRepository(ABC):
     @abstractmethod
     async def register(self, message_id: str) -> bool:

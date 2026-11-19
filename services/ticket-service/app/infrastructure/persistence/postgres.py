@@ -10,6 +10,7 @@ import asyncpg
 from app.application.ports import (
     Outbox,
     ProcessedMessageRepository,
+    TicketQueries,
     TicketRepository,
     UnitOfWork,
     UnitOfWorkFactory,
@@ -66,6 +67,27 @@ class PostgresTicketRepository(TicketRepository):
             status=TicketStatus(row["status"]),
             created_at=row["created_at"],
         )
+
+
+class PostgresTicketQueries(TicketQueries):
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def list(self, tenant_id: str | None, limit: int) -> list[Ticket]:
+        columns = PostgresTicketRepository._COLUMNS
+        if tenant_id:
+            rows = await self._pool.fetch(
+                f"SELECT {columns} FROM tickets WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2", tenant_id, limit
+            )
+        else:
+            rows = await self._pool.fetch(f"SELECT {columns} FROM tickets ORDER BY created_at DESC LIMIT $1", limit)
+        return [PostgresTicketRepository._to_entity(row) for row in rows]
+
+    async def get(self, ticket_id: str) -> Ticket | None:
+        row = await self._pool.fetchrow(
+            f"SELECT {PostgresTicketRepository._COLUMNS} FROM tickets WHERE ticket_id = $1", ticket_id
+        )
+        return PostgresTicketRepository._to_entity(row) if row else None
 
 
 class PostgresProcessedMessageRepository(ProcessedMessageRepository):
