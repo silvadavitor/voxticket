@@ -12,8 +12,20 @@ env: ## cria o .env a partir do exemplo (se não existir)
 infra: env ## sobe só a infraestrutura local (MiniStack, RabbitMQ, Postgres, OTel)
 	docker compose up -d --build
 
-up: env ## sobe tudo localmente (infra + serviços)
-	$(COMPOSE) up -d --build
+# serviços que já têm Dockerfile (os outros ainda não existem e quebrariam o build)
+READY := $(patsubst services/%/Dockerfile,%,$(wildcard services/*/Dockerfile))
+
+up: env ## sobe a infra + todos os serviços que já têm Dockerfile
+	docker compose up -d --build
+	@if [ -n "$(READY)" ]; then $(COMPOSE) up -d --build $(READY); fi
+	@echo "serviços no ar: $(or $(READY),nenhum ainda)"
+
+svc: env ## sobe só um serviço e as dependências dele (make svc s=quota-service)
+	@test -n "$(s)" || { echo "uso: make svc s=<servico>"; exit 1; }
+	$(COMPOSE) up -d --build $(s)
+
+publish: ## publica um evento de teste no RabbitMQ (make publish t=CategorizationRequested f=evento.json)
+	@scripts/dev/publish.sh $(t) $(f)
 
 ps: ## estado dos containers
 	$(COMPOSE) ps -a
@@ -67,4 +79,4 @@ aws-down: ## [local] destrói tudo na AWS
 	$(aws-check)
 	$(AWS_SH) down
 
-.PHONY: help env infra up ps logs down reset test aws-bootstrap aws-up aws-down aws-status aws-deploy
+.PHONY: help env infra up svc publish ps logs down reset test aws-bootstrap aws-up aws-down aws-status aws-deploy

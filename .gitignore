@@ -41,5 +41,5 @@ venv/
 infra/scripts/aws.sh
 infra/scripts/push-images.sh
 
-# Visual Studio
+# IDE do Visual Studio
 .vs/

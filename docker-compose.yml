@@ -42,13 +42,14 @@ services:
   # ============================ infraestrutura ============================
 
   ministack:
-    image: ${MINISTACK_IMAGE:-ministackorg/ministack:latest} # TODO(infra): confirmar imagem/tag
+    image: ${MINISTACK_IMAGE:-ministackorg/ministack:1.5.41}
     ports:
       - "4566:4566"
     environment:
       S3_PERSIST: "1" # sem isso os áudios somem quando o MiniStack reinicia
     volumes:
-      - ministack-data:/var/lib/ministack # TODO(infra): confirmar caminho de dados do MiniStack
+      - ministack-data:/tmp/ministack-data # S3_DATA_DIR da imagem
+    # a imagem já traz healthcheck (GET /_ministack/health)
 
   rabbitmq:
     image: rabbitmq:4.1-management
@@ -154,13 +155,17 @@ services:
       DD_HOST: https://api.${DD_SITE:-datadoghq.com}
       TG_STATE_DIR: /state
       TG_DOWNLOAD_DIR: /state/.terragrunt-cache
-      TF_PLUGIN_CACHE_DIR: /plugins
+      # cache de providers do Terragrunt: seguro com as units aplicando em paralelo
+      # (o TF_PLUGIN_CACHE_DIR do Terraform corrompe com instalações concorrentes)
+      TG_PROVIDER_CACHE: "1"
+      TG_PROVIDER_CACHE_DIR: /plugins
     volumes:
       - ./:/repo
       - tfstate:/state
       - tfplugins:/plugins
     depends_on:
-      - ministack
+      ministack:
+        condition: service_healthy
 
   # Aplica rabbitmq/definitions.json (exchanges, filas quorum, DLQs)
   rabbitmq-init:

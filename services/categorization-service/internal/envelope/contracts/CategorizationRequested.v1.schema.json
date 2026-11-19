@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "CategorizationRequested.v1.schema.json",
+  "title": "CategorizationRequested v1",
+  "description": "Pede a classificação do texto transcrito. Produtor: request-service. Consumidores: categorization-service.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "CategorizationRequested"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "tenantId",
+        "transcriptKey"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transcriptKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chave do objeto no S3 (claim-check)"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
