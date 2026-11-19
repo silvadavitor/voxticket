@@ -4,9 +4,18 @@ Um script por cenário. Cada um **provoca a falha, confere o resultado com ✅/�
 normal**. Todos usam um cliente novo a cada execução, então dá para rodar quantas vezes quiser.
 
 ```bash
-make up          # sistema inteiro no ar
-make f5          # roda um cenário (f1 … f8)
+make up            # sistema inteiro no ar
+make f5            # roda um cenário (f1 … f8)
+PAUSA=1 make f6    # para a cada passo (Enter continua): tempo de mostrar Grafana/RabbitMQ
 ```
+
+Cada cenário **mostra a evidência na tela**, não só o resultado:
+- passos numerados explicando o que está sendo provocado;
+- estado **antes e depois** (consultas SQL impressas com o resultado);
+- a saga do pedido **ao vivo** (cada mudança de status com horário);
+- as **linhas de log** que provam o comportamento (duplicata descartada, réplica que assumiu, timeout…);
+- os **links** do trace no Grafana e da fila no RabbitMQ daquele pedido;
+- no fim, ✅/❌ por verificação.
 
 | Script | Cenário | O que confere |
 |---|---|---|

@@ -35,6 +35,8 @@ declare -A PG_CONTAINER=(
 q()   { $COMPOSE exec -T "${PG_CONTAINER[$1]}" psql -U "$1_user" -d "$1" -c "$2"; }
 # val quota "select ..." → só o valor (para comparar)
 val() { $COMPOSE exec -T "${PG_CONTAINER[$1]}" psql -U "$1_user" -d "$1" -tAc "$2" | tr -d '[:space:]'; }
+# txt quota "select ..." → valor de texto (mantém os espaços)
+txt() { $COMPOSE exec -T "${PG_CONTAINER[$1]}" psql -U "$1_user" -d "$1" -tAc "$2" | tr -d '\r' | head -1; }
 
 # ---------------------------------------------------------------- API (request-service)
 # envia um áudio; imprime o requestId
@@ -90,3 +92,45 @@ s3_ls() {
     -e AWS_DEFAULT_REGION=us-east-1 amazon/aws-cli:2.27.0 --endpoint-url http://ministack:4566 \
     s3 ls "s3://$BUCKET/$1" --recursive 2>/dev/null
 }
+
+# ---------------------------------------------------------------- demonstração (para mostrar ao vivo)
+GRAFANA=${GRAFANA:-http://localhost:3000}
+STEP=0
+# step "texto" → passo numerado; com PAUSA=1 espera Enter (tempo de mostrar Grafana/RabbitMQ)
+step() {
+  STEP=$((STEP + 1))
+  printf '\n\033[1;33m━━ %d. %s\033[0m\n' "$STEP" "$*"
+  if [[ "${PAUSA:-0}" == 1 ]]; then read -rp "   (Enter para continuar) " _ </dev/tty; fi
+}
+say() { printf '   %s\n' "$*"; }
+# show <db> "<titulo>" "<sql>" → mostra a consulta e o resultado em tabela
+show() {
+  printf '   \033[2m%s → %s\033[0m\n' "$1" "$3"
+  q "$1" "$3" | sed 's/^/   /'
+}
+# show_logs <servico> <padrão> [n] → linhas de log que provam o comportamento (só a mensagem)
+show_logs() {
+  $COMPOSE logs --no-log-prefix "$1" 2>&1 | grep -E "$2" | tail -n "${3:-6}" \
+    | sed -E 's/.*"(msg|message)": ?"([^"]*)".*/\2/' | sed "s/^/   [$1] /"
+}
+# watch_status <id> "<FINAL1|FINAL2>" <segundos> → imprime cada mudança de estado da saga ao vivo
+watch_status() {
+  local id=$1 final=$2 t=${3:-120} last="" cur
+  for _ in $(seq "$t"); do
+    cur=$(api_status "$id")
+    if [[ -n "$cur" && "$cur" != "$last" ]]; then
+      printf '   %s  \033[1m%s\033[0m\n' "$(date +%T)" "$cur"; last=$cur
+    fi
+    [[ "$cur" =~ ^($final)$ ]] && return 0
+    sleep 1
+  done
+  return 1
+}
+# links <requestId> → onde ver este pedido agora
+links() {
+  local pane
+  pane=$(jq -cn --arg id "$1" '{a:{datasource:"tempo",queries:[{refId:"A",datasource:{type:"tempo",uid:"tempo"},queryType:"traceql",query:("{span.messaging.message.conversation_id=\""+$id+"\"}")}],range:{from:"now-1h",to:"now"}}}')
+  say "trace no Grafana: $GRAFANA/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$pane" '$p|@uri')"
+  say "status na API:    $API/audios/$1"
+}
+queue_link() { say "fila no RabbitMQ: $MGMT/#/queues/%2F/$1"; }
