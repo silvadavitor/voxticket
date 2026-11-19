@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "AudioReceived.v1.schema.json",
+  "title": "AudioReceived v1",
+  "description": "Áudio recebido e gravado no S3; pede reserva de crédito. Produtor: request-service. Consumidores: quota-service.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "AudioReceived"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "tenantId",
+        "audioKey"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "audioKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chave do objeto no S3 (claim-check)"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -14,7 +14,7 @@
  ═══════════════════════════╪══════════ RabbitMQ (exchange `events`) ══════════════════════════╪═══
         │                   │                │                   │                             │
   quota-service      ticket-service   categorization-svc   notification-svc        transcription-worker ×3
-     Java                Java              Python                C#                        Python
+    Python              Python               Go                  C#                        Python
    [Postgres]          [Postgres]        [Postgres]          [Postgres]                 [Postgres]
                        (request-service também tem o seu Postgres)
 
@@ -28,13 +28,27 @@
 | Serviço | Linguagem | Responsabilidade | Database |
 |---|---|---|---|
 | request-service | C# (ASP.NET Core) | API (202 + status), upload S3, **orquestrador da saga** (estados + timeout) | `requests` |
-| quota-service | Java (Spring Boot) | créditos: reservar / consumir / liberar (R2) | `quota` |
+| quota-service | Python | créditos: reservar / consumir / liberar (R2) | `quota` |
 | transcription-worker | Python | baixa áudio do S3 e transcreve; 3 réplicas (R4, R5) | `transcription` |
-| categorization-service | Python | categoria + prioridade | `categorization` |
-| ticket-service | Java (Spring Boot) | abre chamado, único por `requestId` | `ticket` |
+| categorization-service | Go | categoria + prioridade | `categorization` |
+| ticket-service | Python | abre chamado, único por `requestId` | `ticket` |
 | notification-service | C# | e-mail simulado (log + tabela) | `notification` |
 
 Todo database tem também `outbox` e `processed_messages`.
+
+## APIs HTTP e gateway
+
+Contrato em [`contracts/openapi.yaml`](../contracts/openapi.yaml). O cliente (front) fala com **um endereço só**, e o
+gateway roteia por caminho:
+
+| Caminho | Serviço | Local | AWS |
+|---|---|---|---|
+| `/` (site) | S3 | nginx (`frontend`) → S3 do MiniStack | CloudFront → S3 privado |
+| `/api/audios*` | request-service | nginx | CloudFront → ALB (regra padrão) |
+| `/api/tickets*` | ticket-service | nginx | CloudFront → ALB (regra `/tickets*`) |
+
+Cada serviço expõe só os **dados que são dele**: o request-service, o estado da saga; o ticket-service,
+os chamados. Ninguém lê o banco de outro.
 
 ## Saga (orquestrada pelo request-service)
 
@@ -127,4 +141,5 @@ Tratamento de erro:
 | Mensageria | RabbitMQ (container) | Amazon MQ for RabbitMQ | ADR-002 |
 | Banco de dados | 1 Postgres (container) por serviço | RDS Postgres (database + usuário por serviço) | ADR-003 |
 | Computação | docker compose | ECS Fargate | ADR-001 |
+| Front estático + CDN | S3 (MiniStack) + nginx simulando o CloudFront | S3 privado + CloudFront (HTTPS, `/api/*` → ALB) | ADR-005 |
 | Observabilidade | OTel Collector → Grafana LGTM (Tempo, Prometheus, Loki) | mesma stack LGTM no ECS (standby) ou Datadog | ADR-004 |
