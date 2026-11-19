@@ -107,7 +107,9 @@ step() {
 say() { printf '   %s\n' "$*"; }
 # show <db> "<titulo>" "<sql>" → mostra a consulta e o resultado em tabela
 show() {
-  printf '   \033[2m%s → %s\033[0m\n' "$1" "$3"
+  local sql=$3
+  (( ${#sql} > 110 )) && sql="${sql:0:107}…"   # consulta longa: mostra o começo
+  printf '   \033[2m%s → %s\033[0m\n' "$1" "$sql"
   q "$1" "$3" | sed 's/^/   /'
 }
 # show_logs <servico> <padrão> [n] → linhas de log que provam o comportamento (só a mensagem)
@@ -130,9 +132,7 @@ watch_status() {
 }
 # links <requestId> → onde ver este pedido agora
 links() {
-  local pane
-  pane=$(jq -cn --arg id "$1" '{a:{datasource:"tempo",queries:[{refId:"A",datasource:{type:"tempo",uid:"tempo"},queryType:"traceql",query:("{span.messaging.message.conversation_id=\""+$id+"\"}")}],range:{from:"now-1h",to:"now"}}}')
-  say "trace no Grafana: $GRAFANA/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$pane" '$p|@uri')"
-  say "status na API:    $API/audios/$1"
+  say "status na API:  $API/audios/$1"
+  say "trace (Tempo):  $GRAFANA/explore → Tempo → {span.messaging.message.conversation_id=\"$1\"}"
 }
 queue_link() { say "fila no RabbitMQ: $MGMT/#/queues/%2F/$1"; }
