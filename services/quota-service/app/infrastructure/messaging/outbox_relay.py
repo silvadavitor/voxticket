@@ -54,6 +54,9 @@ class OutboxRelay(BrokerWorker):
             span.set_attribute("messaging.message.id", envelope["messageId"])
             span.set_attribute("messaging.message.conversation_id", envelope["correlationId"])
             span.set_attribute("app.event_type", envelope["type"])
+            tenant_id = envelope.get("payload", {}).get("tenantId")
+            if tenant_id:
+                span.set_attribute("app.tenant_id", tenant_id)
             headers: dict[str, str] = {}
             propagate.inject(headers)
             await exchange.publish(
