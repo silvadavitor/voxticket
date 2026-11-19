@@ -8,6 +8,10 @@ help: ## lista os comandos
 # ---------- local ----------
 env: ## cria o .env a partir do exemplo (se não existir)
 	@test -f .env || cp .env.example .env
+	@if grep -q '^OTEL_BACKEND=jaeger' .env; then \
+	  sed -i.bak 's/^OTEL_BACKEND=jaeger$$/OTEL_BACKEND=local/' .env && rm -f .env.bak; \
+	  echo "aviso: OTEL_BACKEND=jaeger não existe mais; .env ajustado para OTEL_BACKEND=local (Grafana)"; \
+	fi
 
 infra: env ## sobe só a infraestrutura local (MiniStack, RabbitMQ, Postgres, OTel)
 	docker compose up -d --build
