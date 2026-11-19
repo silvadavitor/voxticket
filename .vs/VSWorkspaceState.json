@@ -1,0 +1,12 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\services",
+    "\\services\\notification-service\\Configuration",
+    "\\services\\notification-service\\contracts",
+    "\\services\\notification-service\\Hosting",
+    "\\services\\notification-service\\migrations"
+  ],
+  "SelectedNode": "\\services\\notification-service",
+  "PreviewInSolutionExplorer": false
+}
