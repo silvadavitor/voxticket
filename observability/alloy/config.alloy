@@ -1,0 +1,60 @@
+// Coleta os logs (stdout) de TODOS os containers do projeto pelo Docker e envia para o Loki.
+// Mesmo papel do agente do Datadog: nenhum serviço precisa de código para ter logs no Grafana.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  // só os containers deste projeto do compose
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "voxticket"
+    action        = "keep"
+  }
+  // nome do serviço do compose → service_name (mesmo label dos logs OTLP)
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service_name"
+  }
+  // container (distingue as 3 réplicas do worker)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  labels        = { source = "docker" }
+  forward_to    = [loki.process.niveis.receiver]
+}
+
+// Extrai o nível do log JSON (Go/Python: "level"; .NET: "LogLevel") e normaliza para info/warn/error
+loki.process "niveis" {
+  stage.json {
+    expressions = { level = "level || LogLevel || severity", correlation_id = "correlationId" }
+  }
+  stage.template {
+    source   = "level"
+    template = "{{ $l := ToLower .Value }}{{ if eq $l \"information\" }}info{{ else if eq $l \"warning\" }}warn{{ else if eq $l \"critical\" }}error{{ else }}{{ $l }}{{ end }}"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  stage.structured_metadata {
+    values = { correlation_id = "" }
+  }
+  forward_to = [loki.write.lgtm.receiver]
+}
+
+loki.write "lgtm" {
+  endpoint {
+    url = "http://lgtm:3100/loki/api/v1/push"
+  }
+}

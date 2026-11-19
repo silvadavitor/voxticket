@@ -233,6 +233,16 @@ services:
     volumes:
       - lgtm-data:/data
 
+  # Coletor de logs: lê o stdout de todos os containers do projeto e envia para o Loki (Grafana)
+  alloy:
+    image: grafana/alloy:v1.22.0
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - lgtm
+
   # ============================ microsserviços ============================
   # Cada dono: crie services/<servico>/Dockerfile. Contrato de env em services/<servico>/README.md.
 
