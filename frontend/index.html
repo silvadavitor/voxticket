@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoxTicket</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◉</span>
+      <div>
+        <h1>VoxTicket</h1>
+        <p class="tagline">Do áudio ao chamado: transcrição → categorização → abertura de chamado</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="svc-request" class="chip chip-wait">request-service …</span>
+      <span id="svc-ticket" class="chip chip-wait">ticket-service …</span>
+      <a class="link-btn" id="link-grafana" target="_blank" rel="noopener">Grafana</a>
+      <a class="link-btn" id="link-rabbit" target="_blank" rel="noopener">RabbitMQ</a>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" data-tab="pedidos" aria-selected="true">Pedidos</button>
+    <button class="tab" role="tab" data-tab="chamados" aria-selected="false">Chamados <span id="tickets-count" class="count"></span></button>
+  </nav>
+
+  <!-- ===================== PEDIDOS ===================== -->
+  <main class="layout" id="tab-pedidos">
+    <section class="card new-request">
+      <h2>Novo chamado por voz</h2>
+
+      <label class="field">
+        <span>Cliente (tenant)</span>
+        <input id="tenant" value="tenant-demo" autocomplete="off">
+      </label>
+
+      <div class="record">
+        <button id="btn-record" class="btn btn-record" type="button">
+          <span class="dot"></span><span class="label">Gravar áudio</span>
+        </button>
+        <span id="record-time" class="muted"></span>
+      </div>
+
+      <div class="or"><span>ou</span></div>
+
+      <label class="file">
+        <input id="file" type="file" accept="audio/*">
+        <span id="file-name">Escolher arquivo de áudio…</span>
+      </label>
+
+      <button id="btn-send" class="btn btn-primary" type="button" disabled>Enviar</button>
+      <p id="send-msg" class="muted small" role="status"></p>
+    </section>
+
+    <section class="card requests">
+      <div class="card-head">
+        <h2>Pedidos</h2>
+        <span class="muted small">GET /api/audios · atualiza a cada 2 s</span>
+      </div>
+      <p id="requests-empty" class="empty muted">Nenhum pedido ainda. Grave ou envie um áudio.</p>
+      <ol id="list" class="request-list"></ol>
+    </section>
+
+    <section class="card race">
+      <h2>Corrida pelo recurso escasso <span class="tag">F5</span></h2>
+      <p class="muted">Dispara pedidos simultâneos para um cliente com cota limitada.
+        Com cota 10, exatamente 10 devem virar chamado e o resto ser recusado.</p>
+      <div class="race-form">
+        <label class="field compact"><span>Pedidos</span><input id="race-n" type="number" min="1" max="200" value="100"></label>
+        <label class="field compact"><span>Cliente</span><input id="race-tenant" value="tenant-f5"></label>
+        <button id="btn-race" class="btn btn-primary" type="button">Disparar</button>
+      </div>
+      <div class="race-board">
+        <div class="stat"><span class="stat-n" id="race-sent">0</span><span>aceitos (202)</span></div>
+        <div class="stat ok"><span class="stat-n" id="race-ok">0</span><span>chamados abertos</span></div>
+        <div class="stat bad"><span class="stat-n" id="race-rejected">0</span><span>recusados / compensados</span></div>
+        <div class="stat"><span class="stat-n" id="race-pending">0</span><span>em andamento</span></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== CHAMADOS ===================== -->
+  <main class="single" id="tab-chamados" hidden>
+    <section class="card">
+      <div class="card-head">
+        <h2>Chamados abertos</h2>
+        <div class="filters">
+          <label class="field compact inline"><span>Cliente</span><input id="tickets-tenant" placeholder="todos"></label>
+          <span class="muted small">GET /api/tickets · atualiza a cada 3 s</span>
+        </div>
+      </div>
+      <p id="tickets-empty" class="empty muted">Nenhum chamado ainda.</p>
+      <div class="table-wrap">
+        <table class="tickets" id="tickets-table" hidden>
+          <thead>
+            <tr><th>Chamado</th><th>Cliente</th><th>Categoria</th><th>Prioridade</th><th>Aberto em</th><th>Pedido</th></tr>
+          </thead>
+          <tbody id="tickets-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer muted small">
+    Trabalho Final de Sistemas Distribuídos (FURB) · página estática em S3 + CloudFront · contrato da API em <code>contracts/openapi.yaml</code>
+  </footer>
+
+  <template id="tpl-request">
+    <li class="request">
+      <div class="request-head">
+        <code class="rid"></code>
+        <span class="status chip"></span>
+      </div>
+      <ol class="timeline">
+        <li data-step="0">Recebido</li>
+        <li data-step="1">Crédito reservado</li>
+        <li data-step="2">Transcrito</li>
+        <li data-step="3">Categorizado</li>
+        <li data-step="4">Chamado aberto</li>
+      </ol>
+      <div class="details"></div>
+      <div class="request-actions">
+        <a class="link-btn small trace" target="_blank" rel="noopener">Ver trace no Grafana</a>
+      </div>
+    </li>
+  </template>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

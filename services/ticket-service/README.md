@@ -18,7 +18,17 @@ Abre o chamado, com unicidade por `requestId`. Publica `TicketOpened` (3 interes
 
 Schemas em [`contracts/schemas/`](../../contracts/schemas/). NÃ£o altere um contrato sem combinar com quem consome.
 
-## Requisitos que este serviÃ§o demonstra
+## API HTTP (contrato em [`contracts/openapi.yaml`](../../contracts/openapi.yaml))
+
+Leitura dos chamados para a tela "Chamados" do front (o gateway manda `/api/tickets*` para cá, sem o `/api`):
+
+| Método | Caminho | Resposta |
+|---|---|---|
+| `GET` | `/tickets?tenantId=&limit=` | `[{ticketId, requestId, tenantId, category, priority, createdAt}]`, mais novo primeiro |
+| `GET` | `/tickets/{id}` | um chamado |
+| `GET` | `/health` | `{status, service, broker, db}` |
+
+## Requisitos que este serviço demonstra
 
 - Unicidade por `requestId` (UNIQUE)
 - Pode recusar â†’ `TicketRejected`

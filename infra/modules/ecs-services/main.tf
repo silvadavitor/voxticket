@@ -9,9 +9,12 @@ data "aws_region" "current" {}
 
 locals {
   public_services = { for k, s in var.services : k => s if s.public }
-  discoverable    = { for k, s in var.services : k => s if s.discoverable }
-  autoscaled      = { for k, s in var.services : k => s if s.autoscaling != null }
-  create_alb      = length(local.public_services) > 0
+  # API gateway no ALB: serviço público SEM alb_path_patterns é o padrão; os outros por caminho
+  path_routed    = { for k, s in local.public_services : k => s if length(s.alb_path_patterns) > 0 }
+  default_public = try([for k, s in local.public_services : k if length(s.alb_path_patterns) == 0][0], null)
+  discoverable   = { for k, s in var.services : k => s if s.discoverable }
+  autoscaled     = { for k, s in var.services : k => s if s.autoscaling != null }
+  create_alb     = length(local.public_services) > 0
 
   # services e init_tasks normalizados no mesmo tipo de objeto (para usar em for_each)
   all_tasks = merge(
@@ -192,7 +195,24 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type             = "forward"
-    target_group_arn = values(aws_lb_target_group.this)[0].arn
+    target_group_arn = aws_lb_target_group.this[coalesce(local.default_public, keys(local.public_services)[0])].arn
+  }
+}
+
+resource "aws_lb_listener_rule" "path" {
+  for_each     = local.path_routed
+  listener_arn = aws_lb_listener.http[0].arn
+  priority     = 100 + index(sort(keys(local.path_routed)), each.key)
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this[each.key].arn
+  }
+
+  condition {
+    path_pattern {
+      values = each.value.alb_path_patterns
+    }
   }
 }
 

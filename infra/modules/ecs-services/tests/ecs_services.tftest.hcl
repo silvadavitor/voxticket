@@ -33,6 +33,12 @@ variables {
       port            = 8080
       iam_secret_arns = ["arn:aws:secretsmanager:us-east-1:000000000000:secret:voxticket/test/db/quota-service-abc"]
     }
+    "ticket-service" = {
+      image             = "img/ticket:1"
+      port              = 8080
+      public            = true
+      alb_path_patterns = ["/tickets", "/tickets/*"]
+    }
     "transcription-worker" = {
       image         = "img/worker:1"
       port          = 8080
@@ -47,7 +53,7 @@ run "uma_role_por_servico" {
   command = plan
 
   assert {
-    condition     = length(aws_iam_role.task) == 3
+    condition     = length(aws_iam_role.task) == 4
     error_message = "Cada serviço precisa da própria task role."
   }
 
@@ -61,8 +67,13 @@ run "alb_so_para_api_publica" {
   command = plan
 
   assert {
-    condition     = length(aws_lb.this) == 1 && keys(aws_lb_target_group.this) == ["request-service"]
-    error_message = "Só o request-service fica atrás do ALB."
+    condition     = length(aws_lb.this) == 1 && keys(aws_lb_target_group.this) == ["request-service", "ticket-service"]
+    error_message = "Só os serviços com API pública ficam atrás do ALB."
+  }
+
+  assert {
+    condition     = keys(aws_lb_listener_rule.path) == ["ticket-service"]
+    error_message = "/tickets deve ir para o ticket-service; o resto vai para o request-service."
   }
 
   assert {

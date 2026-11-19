@@ -46,6 +46,7 @@ make reset       # derruba e apaga os dados locais
 ├── docs/                     # requisitos, arquitetura, saga, ADRs, divisão do trabalho, operações
 ├── contracts/                # AsyncAPI + JSON Schema de cada evento (fonte da verdade)
 ├── services/<servico>/       # 1 pasta por microsserviço — cada dono cria o código aqui
+├── frontend/                 # página estática (S3 + CloudFront; local: S3 do MiniStack + nginx)
 ├── rabbitmq/definitions.json # exchanges, filas quorum e DLQs (carregado pelo rabbitmq-init)
 ├── infra/                    # Terraform (modules/) + Terragrunt (live/ministack, live/aws)
 ├── observability/            # OpenTelemetry Collector → Datadog (ou Jaeger como reserva)
@@ -155,6 +156,7 @@ Cenários de falha F1–F8: [scripts/failures/README.md](scripts/failures/README
 
 | URL | O quê | Login |
 |---|---|---|
+| **http://localhost:8088** | **Front**: gravar ou enviar áudio, saga ao vivo, corrida F5 (modo demo se a API estiver fora) | — |
 | http://localhost:8080 | request-service (API) | — |
 | http://localhost:8081…8084, 8090…8092 | `/health` de quota, ticket, categorization, notification, workers | — |
 | http://localhost:15672 | painel do RabbitMQ (filas, DLQs) | guest / guest |

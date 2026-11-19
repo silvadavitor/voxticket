@@ -36,6 +36,20 @@
 
 Todo database tem também `outbox` e `processed_messages`.
 
+## APIs HTTP e gateway
+
+Contrato em [`contracts/openapi.yaml`](../contracts/openapi.yaml). O cliente (front) fala com **um endereço só**, e o
+gateway roteia por caminho:
+
+| Caminho | Serviço | Local | AWS |
+|---|---|---|---|
+| `/` (site) | S3 | nginx (`frontend`) → S3 do MiniStack | CloudFront → S3 privado |
+| `/api/audios*` | request-service | nginx | CloudFront → ALB (regra padrão) |
+| `/api/tickets*` | ticket-service | nginx | CloudFront → ALB (regra `/tickets*`) |
+
+Cada serviço expõe só os **dados que são dele**: o request-service, o estado da saga; o ticket-service,
+os chamados. Ninguém lê o banco de outro.
+
 ## Saga (orquestrada pelo request-service)
 
 ```
@@ -127,4 +141,5 @@ Tratamento de erro:
 | Mensageria | RabbitMQ (container) | Amazon MQ for RabbitMQ | ADR-002 |
 | Banco de dados | 1 Postgres (container) por serviço | RDS Postgres (database + usuário por serviço) | ADR-003 |
 | Computação | docker compose | ECS Fargate | ADR-001 |
+| Front estático + CDN | S3 (MiniStack) + nginx simulando o CloudFront | S3 privado + CloudFront (HTTPS, `/api/*` → ALB) | ADR-005 |
 | Observabilidade | OTel Collector → Jaeger/Datadog | OTel Collector (sidecar) → Datadog | ADR-004 |
