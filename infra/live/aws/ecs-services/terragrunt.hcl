@@ -1,4 +1,4 @@
-# Microsserviços + otel-collector no ECS Fargate.
+# Microsserviços + observabilidade (otel-collector e Grafana LGTM) no ECS Fargate.
 # Imagens: <ecr>/voxticket/<servico>:${IMAGE_TAG} (workflow build-images).
 
 include "root" {
@@ -12,7 +12,6 @@ terraform {
 
 locals {
   tag            = get_env("IMAGE_TAG", "latest")
-  datadog        = get_env("DD_API_KEY", "") != ""
   otel_namespace = "voxticket.internal"
 
   # Só sobe serviço que já tem imagem (o workflow release passa os que têm Dockerfile). Vazio = todos.
@@ -111,7 +110,7 @@ dependency "secrets" {
     db_secret_arns     = { for k, _ in include.root.locals.databases : k => "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-${k}" }
     db_secret_names    = { for k, _ in include.root.locals.databases : k => "mock-${k}" }
     broker_secret_arn  = "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-broker"
-    datadog_secret_arn = null
+    grafana_secret_arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-grafana"
   }
 }
 
@@ -134,7 +133,7 @@ dependency "messaging" {
 dependency "ecr" {
   config_path                             = "../ecr"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
-  mock_outputs                            = { repository_urls = { for k in keys(include.root.locals.databases) : k => "mock/${k}" } }
+  mock_outputs                            = { repository_urls = { for k in concat(keys(include.root.locals.databases), ["lgtm"]) : k => "mock/${k}" } }
 }
 
 dependency "ecs_cluster" {
@@ -172,7 +171,6 @@ inputs = {
     BROKER_EXCHANGE             = "events"
     OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector.${local.otel_namespace}:4317"
     OTEL_RESOURCE_ATTRIBUTES    = "deployment.environment.name=${include.root.locals.environment}"
-    OTEL_SDK_DISABLED           = local.datadog ? "false" : "true"
   }
 
   # Credenciais do broker injetadas pelo ECS a partir do Secrets Manager (chaves do JSON)
@@ -200,25 +198,44 @@ inputs = {
         })
       } if length(local.deploy_only) == 0 || contains(local.deploy_only, svc)
     },
-    # OTel Collector como serviço próprio (Cloud Map: otel-collector.voxticket.internal), só com Datadog
-    local.datadog ? {
+    # Observabilidade: a MESMA stack do ambiente local (ADR-004)
+    {
+      # recebe OTLP dos serviços e lê as filas do Amazon MQ (Cloud Map: otel-collector.voxticket.internal)
       "otel-collector" = {
         image        = "otel/opentelemetry-collector-contrib:0.165.0"
         port         = 4317
         discoverable = true
         command      = ["--config=env:OTEL_CONFIG"]
         environment = {
-          OTEL_CONFIG       = file("${include.root.locals.repo_root}/observability/otel-collector/config.datadog.yaml")
-          DD_SITE           = get_env("DD_SITE", "datadoghq.com")
-          RABBITMQ_MGMT_URL = dependency.messaging.outputs.management_url
+          OTEL_CONFIG        = file("${include.root.locals.repo_root}/observability/otel-collector/config.yaml")
+          LGTM_OTLP_ENDPOINT = "lgtm.${local.otel_namespace}:4317"
+          RABBITMQ_MGMT_URL  = dependency.messaging.outputs.management_url
         }
         secrets = {
-          # coalesce: os dois lados do ternário são avaliados, e interpolar null dá erro
-          DD_API_KEY        = "${coalesce(dependency.secrets.outputs.datadog_secret_arn, "none")}:api_key::"
           RABBITMQ_USER     = "${dependency.secrets.outputs.broker_secret_arn}:username::"
           RABBITMQ_PASSWORD = "${dependency.secrets.outputs.broker_secret_arn}:password::"
         }
       }
-    } : {}
+      # Grafana + Tempo + Prometheus + Loki, com os dashboards embutidos; no ALB em /grafana, com login
+      "lgtm" = {
+        image             = "${dependency.ecr.outputs.repository_urls["lgtm"]}:${local.tag}"
+        port              = 3000
+        public            = true
+        alb_path_patterns = ["/grafana", "/grafana/*"]
+        health_path       = "/grafana/api/health"
+        discoverable      = true
+        cpu               = 1024
+        memory            = 4096
+        environment = {
+          GF_SERVER_ROOT_URL            = "%(protocol)s://%(domain)s/grafana/"
+          GF_SERVER_SERVE_FROM_SUB_PATH = "true"
+          GF_AUTH_ANONYMOUS_ENABLED     = "false"
+          GF_SECURITY_ADMIN_USER        = "admin"
+        }
+        secrets = {
+          GF_SECURITY_ADMIN_PASSWORD = "${dependency.secrets.outputs.grafana_secret_arn}:password::"
+        }
+      }
+    }
   )
 }

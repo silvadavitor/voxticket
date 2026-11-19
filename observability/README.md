@@ -23,18 +23,19 @@ O dashboard já mostra a profundidade de cada fila e DLQ (lida direto do RabbitM
 nos serviços. Os outros painéis se preenchem quando os serviços emitirem as métricas da tabela no fim
 deste arquivo.
 
-## Backends (variável `OTEL_BACKEND` no `.env`)
+## Como funciona
 
-| Valor | Para onde vai | Status |
-|---|---|---|
-| `local` (padrão) | stack LGTM local (`infra/docker/lgtm.Dockerfile`, com o dashboard embutido) | ✅ em uso |
-| `datadog` | conta Datadog (`DD_API_KEY`, `DD_SITE`) + dashboard/monitores em `infra/modules/datadog` | ⏸️ standby: conta não confirmada |
+| Peça | Papel |
+|---|---|
+| `otel-collector` | recebe OTLP de todos os serviços, lê as filas do RabbitMQ, descarta spans de `/health` (`otel-collector/config.yaml`) |
+| `alloy` | lê o **stdout de todos os containers** pelo Docker e manda para o Loki (`alloy/config.alloy`): serviços, RabbitMQ, Postgres, gateway |
+| `lgtm` | Grafana + Tempo + Prometheus + Loki, com os dashboards de `grafana/` embutidos |
 
-Os serviços **não mudam** ao trocar o backend: só o collector muda. Por isso ninguém usa SDK do Datadog
-no código (ADR-004).
+O Tempo também gera **métricas automáticas a partir dos traces** (`traces_spanmetrics_*`, `traces_service_graph_*`):
+requisições, erros e latência por serviço e por operação, com o mesmo nome nas 3 linguagens, como num APM.
 
-**Na AWS (standby):** o plano é rodar a **mesma imagem LGTM como serviço ECS** (atrás do ALB na porta
-3000, com login e IP restrito), para mostrar o mesmo Grafana local e na nuvem. Opções avaliadas no ADR-004.
+**Na AWS:** a mesma imagem `lgtm` e o mesmo collector rodam no ECS. O Grafana fica no ALB em `/grafana`, com
+login (usuário `admin`, senha no Secrets Manager em `voxticket/aws/grafana`). Decisão e alternativas no ADR-004.
 
 ## O que cada serviço precisa fazer
 

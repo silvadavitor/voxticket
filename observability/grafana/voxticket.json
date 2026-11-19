@@ -41,7 +41,11 @@
         {
           "refId": "A",
           "expr": "sum(increase(voxticket_saga_completed_total[15m]))",
-          "legendFormat": ""
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -55,6 +59,10 @@
           ]
         },
         "colorMode": "background"
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -72,7 +80,11 @@
         {
           "refId": "A",
           "expr": "sum(increase(voxticket_saga_compensated_total[15m]))",
-          "legendFormat": ""
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -86,6 +98,10 @@
           ]
         },
         "colorMode": "background"
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -103,7 +119,11 @@
         {
           "refId": "A",
           "expr": "sum(rabbitmq_message_current{queue=~\".*dlq\"}) or vector(0)",
-          "legendFormat": ""
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -117,6 +137,10 @@
           ]
         },
         "colorMode": "background"
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -134,7 +158,11 @@
         {
           "refId": "A",
           "expr": "sum(voxticket_outbox_pending) or vector(0)",
-          "legendFormat": ""
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -148,6 +176,10 @@
           ]
         },
         "colorMode": "background"
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -165,24 +197,40 @@
         {
           "refId": "A",
           "expr": "sum(rate(voxticket_credit_reserved_total[1m]))*60",
-          "legendFormat": "reservados/min"
+          "legendFormat": "reservados/min",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         },
         {
           "refId": "B",
           "expr": "sum(rate(voxticket_credit_rejected_total[1m]))*60",
-          "legendFormat": "rejeitados/min"
+          "legendFormat": "rejeitados/min",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         },
         {
           "refId": "C",
           "expr": "sum(rate(voxticket_credit_released_total[1m]))*60",
-          "legendFormat": "liberados/min"
+          "legendFormat": "liberados/min",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
     },
     {
       "id": 7,
@@ -199,14 +247,22 @@
         {
           "refId": "A",
           "expr": "sum by (reason) (rate(voxticket_saga_compensated_total[1m]))*60",
-          "legendFormat": "{{reason}}"
+          "legendFormat": "{{reason}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
     },
     {
       "id": 8,
@@ -236,14 +292,22 @@
         {
           "refId": "A",
           "expr": "sum by (queue) (rabbitmq_message_current)",
-          "legendFormat": "{{queue}}"
+          "legendFormat": "{{queue}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
     },
     {
       "id": 10,
@@ -260,14 +324,22 @@
         {
           "refId": "A",
           "expr": "max by (job) (voxticket_outbox_pending)",
-          "legendFormat": "{{job}}"
+          "legendFormat": "{{job}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
     },
     {
       "id": 11,
@@ -297,14 +369,22 @@
         {
           "refId": "A",
           "expr": "sum by (instance) (increase(voxticket_transcription_processed_total[1m]))",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
     },
     {
       "id": 13,
@@ -321,7 +401,11 @@
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{job}}"
+          "legendFormat": "{{job}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -330,7 +414,11 @@
         },
         "overrides": []
       },
-      "options": {}
+      "options": {},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
     },
     {
       "id": 14,

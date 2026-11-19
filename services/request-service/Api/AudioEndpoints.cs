@@ -13,6 +13,7 @@ public static partial class AudioEndpoints
     public static void MapAudioEndpoints(this WebApplication app)
     {
         app.MapPost("/audios", ReceiveAudioAsync).DisableAntiforgery();
+        app.MapGet("/audios", ListAsync);
         app.MapGet("/audios/{id:guid}", GetStatusAsync);
     }
 
@@ -63,20 +64,30 @@ public static partial class AudioEndpoints
     {
         await using var connection = await database.OpenConnectionAsync();
         var request = await requests.FindAsync(connection, id);
-        return request is null
-            ? Results.NotFound()
-            : Results.Ok(new
-            {
-                requestId = request.Id,
-                request.TenantId,
-                request.Status,
-                request.Category,
-                request.Priority,
-                request.TicketId,
-                request.FailureReason,
-                request.UpdatedAt,
-            });
+        return request is null ? Results.NotFound() : Results.Ok(ToDto(request));
     }
+
+    /// <summary>Lista para o front (aba Pedidos): mais novos primeiro, ?tenantId= opcional, ?limit= 1..200.</summary>
+    static async Task<IResult> ListAsync(string? tenantId, int? limit, Database database, AudioRequestRepository requests)
+    {
+        var size = Math.Clamp(limit ?? 50, 1, 200);
+        await using var connection = await database.OpenConnectionAsync();
+        var list = await requests.ListAsync(connection, string.IsNullOrWhiteSpace(tenantId) ? null : tenantId, size);
+        return Results.Ok(list.Select(ToDto));
+    }
+
+    static object ToDto(AudioRequest request) => new
+    {
+        requestId = request.Id,
+        request.TenantId,
+        request.Status,
+        request.Category,
+        request.Priority,
+        request.TicketId,
+        request.FailureReason,
+        request.CreatedAt,
+        request.UpdatedAt,
+    };
 
     [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$")]
     private static partial Regex TenantIdPattern();

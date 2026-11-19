@@ -1,4 +1,4 @@
-# OTel Collector LOCAL → grafana/otel-lgtm (Grafana + Tempo + Prometheus + Loki), http://localhost:3000
+# OTel Collector → stack LGTM (Grafana + Tempo + Prometheus + Loki). Mesma config local e na AWS.
 # Env: ENVIRONMENT, RABBITMQ_MGMT_URL, RABBITMQ_USER, RABBITMQ_PASSWORD, LGTM_OTLP_ENDPOINT
 receivers:
   otlp:
@@ -37,6 +37,16 @@ processors:
         action: delete
       - key: db.connection_string
         action: delete
+  # health checks (a cada poucos segundos, em todos os serviços) só poluem a busca de traces
+  filter/health:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["url.path"] == "/health"'
+        - 'attributes["http.route"] == "/health"'
+        - 'attributes["http.target"] == "/health"'
+        - 'name == "GET /health"'
+        - 'name == "GET /health http send"'
   batch: {}
 
 exporters:
@@ -54,7 +64,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, attributes/redact, batch]
+      processors: [memory_limiter, filter/health, resource, attributes/redact, batch]
       exporters: [otlp/lgtm]
     metrics:
       receivers: [otlp, rabbitmq]
