@@ -12,7 +12,8 @@ from app.infrastructure.messaging.consumer import TicketRequestedConsumer
 from app.infrastructure.messaging.contract_validator import ContractValidator
 from app.infrastructure.messaging.outbox_relay import OutboxRelay
 from app.infrastructure.persistence.database import Database
-from app.infrastructure.persistence.postgres import PostgresUnitOfWorkFactory
+from app.application.ports import TicketQueries
+from app.infrastructure.persistence.postgres import PostgresTicketQueries, PostgresUnitOfWorkFactory
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,10 @@ class TicketServiceContainer(Stoppable):
     @property
     def broker_up(self) -> bool:
         return bool(self._workers) and all(worker.connected for worker in self._workers)
+
+    def ticket_queries(self) -> TicketQueries:
+        """Leitura dos chamados; RuntimeError enquanto o banco não conectou."""
+        return PostgresTicketQueries(self.database.pool)
 
     async def start(self) -> None:
         self._tasks.append(asyncio.create_task(self._bootstrap(), name="bootstrap"))
