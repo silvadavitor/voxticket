@@ -1,4 +1,4 @@
-"""Transactional outbox (CLAUDE.md 5.2).
+"""Transactional outbox (ver docs/architecture.md, padrões comuns).
 
 - `enqueue` grava o evento na tabela outbox NA MESMA transação do efeito de negócio.
 - `OutboxRelay` publica os pendentes em ordem de id, com publisher confirm, e só então marca sent_at.

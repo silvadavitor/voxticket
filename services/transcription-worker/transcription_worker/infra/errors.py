@@ -1,4 +1,4 @@
-"""Erro de infraestrutura ≠ mensagem venenosa (CLAUDE.md 5.5).
+"""Erro de infraestrutura ≠ mensagem venenosa (ver docs/architecture.md, tratamento de erro).
 
 - InvalidMessage      → nack(requeue) → conta tentativa → DLQ após x-delivery-limit.
 - erro de infraestrutura (banco, S3, rede) → retry interno com backoff segurando a mensagem.
