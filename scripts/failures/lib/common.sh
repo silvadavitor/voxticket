@@ -75,7 +75,7 @@ uuid() { cat /proc/sys/kernel/random/uuid; }
 # recria um serviço com variáveis sobrescritas: recreate transcription-worker VAR=valor ...
 recreate() {
   local svc=$1; shift
-  env "$@" $COMPOSE up -d --force-recreate "$svc" >/dev/null 2>&1
+  env "$@" $COMPOSE up -d --no-deps --force-recreate "$svc" >/dev/null 2>&1
   until_ok 90 "curl -fsS localhost:$(port_of "$svc")/health >/dev/null 2>&1"
 }
 port_of() {
