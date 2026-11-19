@@ -42,6 +42,17 @@ reset: ## para tudo e APAGA bancos, filas e S3 locais
 f%: ## roda um cenário de falha (make f5)
 	@ls scripts/failures/F$*-*.sh >/dev/null && bash scripts/failures/F$*-*.sh
 
+# ---------- observabilidade ----------
+grafana: ## abre o Grafana local (traces, métricas, logs, dashboard VoxTicket)
+	@echo "http://localhost:3000/d/voxticket-saga"; (xdg-open http://localhost:3000/d/voxticket-saga >/dev/null 2>&1 || open http://localhost:3000/d/voxticket-saga >/dev/null 2>&1 || true)
+
+otel-test: ## manda traces, métricas e logs sintéticos pelo collector (testa o pipeline sem serviço pronto)
+	@for sig in traces metrics logs; do \
+	  docker run --rm --network voxticket_default ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 $$sig \
+	    --otlp-endpoint otel-collector:4317 --otlp-insecure --service voxticket-smoke --duration 5s --rate 5 >/dev/null 2>&1 \
+	  && echo "ok: $$sig enviado"; \
+	done; echo "Veja em http://localhost:3000 → Explore (service.name = voxticket-smoke)"
+
 # ---------- qualidade ----------
 test: ## valida infra: fmt, validate e testes dos módulos Terraform, HCL do Terragrunt, compose
 	terraform fmt -check -recursive infra/modules
@@ -79,4 +90,4 @@ aws-down: ## [local] destrói tudo na AWS
 	$(aws-check)
 	$(AWS_SH) down
 
-.PHONY: help env infra up svc publish ps logs down reset test aws-bootstrap aws-up aws-down aws-status aws-deploy
+.PHONY: help env infra up svc publish ps logs down reset test grafana otel-test aws-bootstrap aws-up aws-down aws-status aws-deploy

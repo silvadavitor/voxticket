@@ -142,4 +142,4 @@ Tratamento de erro:
 | Banco de dados | 1 Postgres (container) por serviço | RDS Postgres (database + usuário por serviço) | ADR-003 |
 | Computação | docker compose | ECS Fargate | ADR-001 |
 | Front estático + CDN | S3 (MiniStack) + nginx simulando o CloudFront | S3 privado + CloudFront (HTTPS, `/api/*` → ALB) | ADR-005 |
-| Observabilidade | OTel Collector → Jaeger/Datadog | OTel Collector (sidecar) → Datadog | ADR-004 |
+| Observabilidade | OTel Collector → Grafana LGTM (Tempo, Prometheus, Loki) | mesma stack LGTM no ECS (standby) ou Datadog | ADR-004 |

@@ -34,6 +34,8 @@ make ps          # estado dos containers
 make logs s=quota-service
 make f5          # roda o cenário de falha F5 (vale f1…f8)
 make test        # testes da infraestrutura
+make grafana     # abre o Grafana (traces, métricas, logs)
+make otel-test   # manda telemetria de teste para validar o pipeline
 make reset       # derruba e apaga os dados locais
 
 # AWS: pelo GitHub Actions → workflows infra-up, deploy (automático) e infra-destroy
@@ -49,7 +51,7 @@ make reset       # derruba e apaga os dados locais
 ├── frontend/                 # página estática (S3 + CloudFront; local: S3 do MiniStack + nginx)
 ├── rabbitmq/definitions.json # exchanges, filas quorum e DLQs (carregado pelo rabbitmq-init)
 ├── infra/                    # Terraform (modules/) + Terragrunt (live/ministack, live/aws)
-├── observability/            # OpenTelemetry Collector → Datadog (ou Jaeger como reserva)
+├── observability/            # OpenTelemetry Collector + Grafana LGTM (traces, métricas, logs, dashboard)
 ├── scripts/failures/         # um script por cenário F1–F8 + consultas SQL de verificação
 ├── .github/workflows/        # ci, infra-plan, deploy, infra-up, infra-destroy (OIDC)
 ├── Makefile                  # atalhos (make help)
@@ -79,7 +81,7 @@ make reset       # derruba e apaga os dados locais
 | `curl` e `jq` | `jq --version` | só para os scripts de teste (`sudo apt install jq curl`) |
 | ~8 GB de RAM livres | | são uns 15 containers |
 
-Portas que precisam estar livres: `4566`, `5672`, `15672`, `5433`–`5438`, `8080`–`8084`, `8090`–`8092`, `4317`, `4318`, `16686`.
+Portas que precisam estar livres: `4566`, `5672`, `15672`, `5433`–`5438`, `8080`–`8084`, `8090`–`8092`, `4317`, `4318`, `3000`.
 
 ### 1. Clonar e configurar
 
@@ -104,7 +106,7 @@ docker compose ps -a
 ```
 
 O esperado:
-- `ministack`, `rabbitmq`, `postgres-*`, `otel-collector` e `jaeger` com estado **running** (os Postgres e o RabbitMQ como **healthy**);
+- `ministack`, `rabbitmq`, `postgres-*`, `otel-collector` e `lgtm` com estado **running** (os Postgres e o RabbitMQ como **healthy**);
 - `infra-init` e `rabbitmq-init` com **Exited (0)**. Eles rodam uma vez e terminam; exit 0 = deu certo.
 
 Se algum `*-init` saiu com código diferente de 0: `docker compose logs infra-init` (ou `rabbitmq-init`).
@@ -160,7 +162,7 @@ Cenários de falha F1–F8: [scripts/failures/README.md](scripts/failures/README
 | http://localhost:8080 | request-service (API) | — |
 | http://localhost:8081…8084, 8090…8092 | `/health` de quota, ticket, categorization, notification, workers | — |
 | http://localhost:15672 | painel do RabbitMQ (filas, DLQs) | guest / guest |
-| http://localhost:16686 | Jaeger (traces), com `OTEL_BACKEND=jaeger` | — |
+| http://localhost:3000 | **Grafana**: traces (Tempo), métricas (Prometheus), logs (Loki) e o dashboard *VoxTicket — Saga* | sem login (local) |
 | `localhost:5433`…`5438` | Postgres de request, quota, transcription, categorization, ticket, notification | usuário `<db>_user`, senha do `.env` |
 
 Abrir o banco de um serviço pelo terminal:
