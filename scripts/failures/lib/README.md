@@ -1,2 +1,3 @@
-`sample.ogg` é um arquivo falso: no modo `TRANSCRIBER_MODE=fake` o conteúdo não importa. Troque por um áudio real se usar `whisper`.
-Dependências dos scripts: `bash`, `curl`, `jq`, `docker compose`.
+Áudios de teste com fala real em português (o worker transcreve com Whisper):
+- `tec-urg.mp3`: problema técnico urgente (padrão dos cenários)
+- `finan.mp3`: cobrança/financeiro (alternado no F8)

@@ -286,6 +286,12 @@ services:
       - "8090-8092:8080" # 1 porta por réplica
     deploy:
       replicas: 3 # R4 / F8
+      # Whisper usa todos os núcleos e picos de memória ao transcrever: limita cada réplica para a máquina
+      # nunca travar (no pior caso o Docker derruba só a réplica e a mensagem volta para a fila)
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1536M
     environment:
       <<: *app-env
       SERVICE_NAME: transcription-worker

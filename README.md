@@ -147,7 +147,7 @@ O que o seu serviço publicar aparece nas filas dos consumidores no painel do Ra
 ### 4. Testar o fluxo
 
 ```bash
-curl -F tenantId=tenant-demo -F file=@scripts/failures/lib/sample.ogg localhost:8080/audios
+curl -F tenantId=tenant-demo -F file=@scripts/failures/lib/tec-urg.mp3 localhost:8080/audios
 # → 202 {"requestId": "...", "statusUrl": "/audios/..."}
 curl localhost:8080/audios/<requestId>
 ```
