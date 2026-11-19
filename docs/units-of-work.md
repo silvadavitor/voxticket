@@ -6,11 +6,11 @@ Cada unit é desenvolvida e testada de forma independente, contra os contratos e
 |---|---|---|---|---|
 | infra | `infra/` | Terraform + Terragrunt | Vitor | — |
 | observability | `observability/`, `infra/modules/datadog` | OTel / Datadog | Vitor | infra |
-| request-service | `services/request-service` | C# | _a definir_ | contracts, infra |
-| notification-service | `services/notification-service` | C# | _a definir_ | contracts |
-| quota-service | `services/quota-service` | Java | _a definir_ | contracts |
-| ticket-service | `services/ticket-service` | Java | _a definir_ | contracts |
-| transcription-worker | `services/transcription-worker` | Python | _a definir_ | contracts, infra (S3) |
+| request-service | `services/request-service` | C# | Pedro | contracts, infra |
+| notification-service | `services/notification-service` | C# | Pedro | contracts |
+| quota-service | `services/quota-service` | Python | Samuel | contracts |
+| ticket-service | `services/ticket-service` | Python | Samuel | contracts |
+| transcription-worker | `services/transcription-worker` | Python | Pedro | contracts, infra (S3) |
 | categorization-service | `services/categorization-service` | Go | Vitor da Silva | contracts |
 
 > Atribuam os donos aqui e no README de cada serviço. Sugestão: quem pega um serviço de uma

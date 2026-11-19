@@ -17,9 +17,9 @@
 
 | Nome | Responsabilidade |
 |---|---|
-| Vitor da Silva | Infraestrutura (Terraform/Terragrunt, AWS), observabilidade e um serviço |
-| Pedro B. Freitag | Serviços _(a definir quais)_ |
-| Samuel Jose Candido | Serviços _(a definir quais)_ |
+| Vitor da Silva | categorization-service, infraestrutura (Terraform/Terragrunt, AWS) e observabilidade |
+| Pedro B. Freitag | request-service, notification-service, transcription-worker |
+| Samuel Jose Candido | quota-service, ticket-service |
 
 O cliente envia um áudio, o sistema transcreve, classifica o texto e abre um chamado. O recurso
 escasso são os **créditos de transcrição por cliente**: o crédito é reservado quando o áudio chega,
@@ -59,11 +59,11 @@ make reset       # derruba e apaga os dados locais
 
 | Serviço | Linguagem | Responsável | Pasta |
 |---|---|---|---|
-| request-service (API + orquestrador da saga) | C# | _a definir_ | [services/request-service](services/request-service/) |
-| notification-service | C# | _a definir_ | [services/notification-service](services/notification-service/) |
-| quota-service (recurso escasso) | Java | _a definir_ | [services/quota-service](services/quota-service/) |
-| ticket-service | Java | _a definir_ | [services/ticket-service](services/ticket-service/) |
-| transcription-worker (×3 réplicas) | Python | _a definir_ | [services/transcription-worker](services/transcription-worker/) |
+| request-service (API + orquestrador da saga) | C# | Pedro B. Freitag | [services/request-service](services/request-service/) |
+| notification-service | C# | Pedro B. Freitag | [services/notification-service](services/notification-service/) |
+| quota-service (recurso escasso) | Python | Samuel José Candido | [services/quota-service](services/quota-service/) |
+| ticket-service | Python | Samuel José Candido | [services/ticket-service](services/ticket-service/) |
+| transcription-worker (×3 réplicas) | Python | Pedro B. Freitag | [services/transcription-worker](services/transcription-worker/) |
 | categorization-service | Go | Vitor da Silva | [services/categorization-service](services/categorization-service/) |
 | Infra (Terraform/Terragrunt) + Observabilidade | HCL | Vitor | [infra](infra/), [observability](observability/) |
 
@@ -205,7 +205,7 @@ Um push com a infra destruída **não recria nada**; criar é sempre manual. A c
 
 | Exigência | Como foi atendida | Onde |
 |---|---|---|
-| ≥ 4 microsserviços, ≥ 3 linguagens | 6 serviços em C#, Java, Python e Go | [services/](services/) |
+| ≥ 4 microsserviços, ≥ 3 linguagens | 6 serviços em C#, Python e Go | [services/](services/) |
 | Mensageria assíncrona + contratos | RabbitMQ (Amazon MQ na AWS); AsyncAPI + JSON Schema, envelope único | [contracts/](contracts/), [ADR-002](docs/adr/ADR-002-mensageria-rabbitmq.md) |
 | ≥ 3 categorias de nuvem | Mensageria, armazenamento de objetos (S3), segredos (Secrets Manager), banco (RDS), computação (ECS) | [docs/architecture.md](docs/architecture.md#nuvem) |
 | Banco por serviço | Postgres próprio por serviço; na AWS, um database e um usuário isolados por serviço | [ADR-003](docs/adr/ADR-003-postgres-database-por-servico.md) |
