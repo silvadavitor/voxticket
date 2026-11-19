@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TicketRejected.v1.schema.json",
+  "title": "TicketRejected v1",
+  "description": "Chamado recusado; dispara compensação. Produtor: ticket-service. Consumidores: request-service.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "TicketRejected"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "reason"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

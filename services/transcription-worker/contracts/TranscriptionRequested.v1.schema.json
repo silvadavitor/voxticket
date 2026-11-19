@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TranscriptionRequested.v1.schema.json",
+  "title": "TranscriptionRequested v1",
+  "description": "Pede a transcrição do áudio. Produtor: request-service. Consumidores: transcription-worker.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "TranscriptionRequested"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "tenantId",
+        "audioKey"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "audioKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chave do objeto no S3 (claim-check)"
+        },
+        "deadline": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

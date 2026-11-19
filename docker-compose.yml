@@ -245,7 +245,10 @@ services:
 
   transcription-worker:
     profiles: [apps]
-    build: ./services/transcription-worker
+    build:
+      context: ./services/transcription-worker
+      args:
+        WHISPER_MODEL: ${WHISPER_MODEL:-base} # embutido na imagem
     ports:
       - "8090-8092:8080" # 1 porta por réplica
     deploy:
@@ -257,11 +260,11 @@ services:
       BROKER_QUEUE: transcription-worker.q
       DB_HOST: postgres-transcription
       DB_SECRET_ID: voxticket/local/db/transcription-worker
-      TRANSCRIBE_LATENCY_MS_MIN: ${TRANSCRIBE_LATENCY_MS_MIN:-500}
-      TRANSCRIBE_LATENCY_MS_MAX: ${TRANSCRIBE_LATENCY_MS_MAX:-3000}
-      TRANSCRIBE_FAILURE_RATE: ${TRANSCRIBE_FAILURE_RATE:-0.1}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-pt}
+      TRANSCRIBE_LATENCY_MS_MIN: ${TRANSCRIBE_LATENCY_MS_MIN:-0}
+      TRANSCRIBE_LATENCY_MS_MAX: ${TRANSCRIBE_LATENCY_MS_MAX:-0}
+      TRANSCRIBE_FAILURE_RATE: ${TRANSCRIBE_FAILURE_RATE:-0}
       TRANSCRIBE_MAX_ATTEMPTS: ${TRANSCRIBE_MAX_ATTEMPTS:-3}
-      TRANSCRIBER_MODE: ${TRANSCRIBER_MODE:-fake}
     depends_on:
       <<: *app-depends
       postgres-transcription:

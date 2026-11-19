@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TranscriptDiscardRequested.v1.schema.json",
+  "title": "TranscriptDiscardRequested v1",
+  "description": "Compensação de resultado atrasado (F7): marcar transcrição como DISCARDED. Produtor: request-service. Consumidores: transcription-worker.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "TranscriptDiscardRequested"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "requestId"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "transcriptKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chave do objeto no S3 (claim-check)"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
