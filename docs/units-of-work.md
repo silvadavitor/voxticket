@@ -5,7 +5,7 @@ Cada unit é desenvolvida e testada de forma independente, contra os contratos e
 | Unit | Pasta | Linguagem | Responsável | Depende de |
 |---|---|---|---|---|
 | infra | `infra/` | Terraform + Terragrunt | Vitor | — |
-| observability | `observability/`, `infra/modules/datadog` | OTel / Datadog | Vitor | infra |
+| observability | `observability/`, `infra/docker/lgtm.Dockerfile` | OTel / Grafana | Vitor | infra |
 | request-service | `services/request-service` | C# | Pedro | contracts, infra |
 | notification-service | `services/notification-service` | C# | Pedro | contracts |
 | quota-service | `services/quota-service` | Python | Samuel | contracts |

@@ -157,9 +157,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       RABBITMQ_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
-      DD_API_KEY: ${DD_API_KEY:-}
-      DD_APP_KEY: ${DD_APP_KEY:-}
-      DD_HOST: https://api.${DD_SITE:-datadoghq.com}
       TG_STATE_DIR: /state
       TG_DOWNLOAD_DIR: /state/.terragrunt-cache
       # cache de providers do Terragrunt: seguro com as units aplicando em paralelo
@@ -201,16 +198,14 @@ services:
 
   # ============================ observabilidade ============================
 
-  # Recebe OTLP dos serviços e lê a profundidade das filas do RabbitMQ.
-  # OTEL_BACKEND=local (padrão) → stack LGTM abaixo | datadog → conta Datadog (DD_API_KEY)
+  # Recebe OTLP dos serviços (traces, métricas, logs), lê a profundidade das filas do RabbitMQ
+  # e envia tudo para a stack LGTM abaixo.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.165.0
-    command: ["--config=/etc/otelcol/config.${OTEL_BACKEND:-local}.yaml"]
+    command: ["--config=/etc/otelcol/config.yaml"]
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-local}
       LGTM_OTLP_ENDPOINT: lgtm:4317
-      DD_API_KEY: ${DD_API_KEY:-}
-      DD_SITE: ${DD_SITE:-datadoghq.com}
       RABBITMQ_MGMT_URL: http://rabbitmq:15672
       RABBITMQ_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
@@ -232,6 +227,16 @@ services:
       - "3000:3000"
     volumes:
       - lgtm-data:/data
+
+  # Coletor de logs: lê o stdout de todos os containers do projeto e envia para o Loki (Grafana)
+  alloy:
+    image: grafana/alloy:v1.22.0
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - lgtm
 
   # ============================ microsserviços ============================
   # Cada dono: crie services/<servico>/Dockerfile. Contrato de env em services/<servico>/README.md.

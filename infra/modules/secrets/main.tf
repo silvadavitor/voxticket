@@ -1,4 +1,4 @@
-# Segredos: credenciais do Postgres (1 usuário por serviço + master opcional), do broker e (opcional) Datadog.
+# Segredos: credenciais do Postgres (1 usuário por serviço + master opcional), do broker e do Grafana.
 # Local: 1 container Postgres por serviço, todos com a senha do .env (db_password).
 # AWS: 1 RDS com 1 database/usuário por serviço, senhas geradas, master usado pelo db-init.
 # Endpoints (host/porta) NÃO ficam aqui: vêm de variáveis de ambiente.
@@ -73,17 +73,21 @@ resource "aws_secretsmanager_secret_version" "broker" {
   })
 }
 
-resource "aws_secretsmanager_secret" "datadog" {
-  count                   = var.create_datadog_secret ? 1 : 0
-  name                    = "${var.name_prefix}/datadog"
-  description             = "API key do Datadog (lida pelo OTel Collector)"
+resource "random_password" "grafana" {
+  length  = 24
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "grafana" {
+  name                    = "${var.name_prefix}/grafana"
+  description             = "Login do Grafana (admin) na AWS"
   recovery_window_in_days = var.recovery_window_in_days
 }
 
-resource "aws_secretsmanager_secret_version" "datadog" {
-  count     = var.create_datadog_secret ? 1 : 0
-  secret_id = aws_secretsmanager_secret.datadog[0].id
+resource "aws_secretsmanager_secret_version" "grafana" {
+  secret_id = aws_secretsmanager_secret.grafana.id
   secret_string = jsonencode({
-    api_key = var.datadog_api_key
+    username = "admin"
+    password = random_password.grafana.result
   })
 }

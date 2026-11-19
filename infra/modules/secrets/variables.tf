@@ -45,17 +45,7 @@ variable "broker_password" {
   sensitive   = true
 }
 
-variable "create_datadog_secret" {
-  description = "Cria o segredo do Datadog. Precisa ser conhecido no plan (não derive de valor sensível)."
-  type        = bool
-  default     = false
-}
 
-variable "datadog_api_key" {
-  type      = string
-  default   = ""
-  sensitive = true
-}
 
 variable "recovery_window_in_days" {
   description = "0 = apaga na hora (permite recriar o ambiente do zero)."

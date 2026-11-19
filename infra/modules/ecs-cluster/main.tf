@@ -43,7 +43,7 @@ data "aws_iam_policy_document" "ecs_assume" {
 }
 
 # Execution role: usada pelo agente do ECS para puxar imagem, escrever log e injetar
-# os `secrets` da task definition (credenciais do broker, API key do Datadog).
+# os `secrets` da task definition (credenciais do broker, senha do Grafana).
 resource "aws_iam_role" "execution" {
   name               = "${var.name}-execution"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json

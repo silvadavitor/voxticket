@@ -6,7 +6,7 @@ Mesmos módulos, dois ambientes:
 infra/
 ├── modules/                 # Terraform puro, sem nada específico de ambiente
 │   ├── storage/             #   S3 (audios/, transcripts/, failed/ + lifecycle)
-│   ├── secrets/             #   Secrets Manager (1 por serviço, broker, datadog; master só na AWS)
+│   ├── secrets/             #   Secrets Manager (1 por serviço, broker, Grafana; master só na AWS)
 │   ├── network/             #   VPC (sem NAT) + security groups              [só aws]
 │   ├── database/            #   RDS Postgres                                 [só aws]
 │   ├── messaging/           #   Amazon MQ for RabbitMQ                       [só aws]
@@ -15,12 +15,11 @@ infra/
 │   ├── ecs-services/        #   Fargate: serviços, role por serviço, ALB, Cloud Map, autoescala [só aws]
 │   ├── budget/              #   alerta de orçamento                          [só aws]
 │   ├── github-oidc/         #   OIDC + roles de deploy e de plan do CI       [só aws]
-│   └── datadog/             #   dashboard + monitores (só com DD_API_KEY/DD_APP_KEY)
 ├── live/
 │   ├── root.hcl             # provider (MiniStack x AWS), backend de estado, nomes comuns
-│   ├── ministack/           # env local: storage, secrets, datadog
+│   ├── ministack/           # env local: storage, secrets, frontend
 │   └── aws/                 # env de entrega: budget, github-oidc (bootstrap) → network → storage → secrets
-│                            #   → database, messaging, ecr, ecs-cluster → ecs-init → ecs-services, datadog
+│                            #   → database, messaging, ecr, ecs-cluster → ecs-init → ecs-services, frontend
 ├── docker/                  # imagens: terragrunt (infra-init), db-init (só AWS), rabbitmq-init
 └── scripts/                 # run-init-tasks.sh, db-init.sh, rabbitmq-init.sh
 
@@ -85,8 +84,6 @@ Por que assim:
    | Variable | `AWS_REGION` | `us-east-1` |
    | Variable | `BUDGET_EMAILS` | e-mails do alerta, separados por vírgula |
    | Variable | `API_ALLOWED_CIDRS` | opcional, ex.: `200.1.2.3/32` |
-   | Variable | `DD_SITE` | opcional, ex.: `us5.datadoghq.com` |
-   | Secret | `DD_API_KEY`, `DD_APP_KEY` | opcionais (Datadog) |
 
 4. **Actions → infra-up → Run workflow.** Daí em diante, todo merge na `main` faz deploy sozinho.
    Depois da apresentação: **Actions → infra-destroy**.
@@ -103,7 +100,7 @@ Por que assim:
 ```bash
 cd infra/live/aws
 terragrunt run --all --backend-bootstrap \
-  --filter '!./github-oidc' --filter '!./ecs-init' --filter '!./ecs-services' --filter '!./datadog' apply
+  --filter '!./github-oidc' --filter '!./ecs-init' --filter '!./ecs-services' apply
 # build e push das imagens para <conta>.dkr.ecr.<região>.amazonaws.com/voxticket/<nome>:<tag>
 export IMAGE_TAG=<tag>
 terragrunt run --working-dir ecs-init -- apply -auto-approve && ../../scripts/run-init-tasks.sh
