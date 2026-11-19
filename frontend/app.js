@@ -68,13 +68,29 @@ function checkAll() {
 
 // ---------------------------------------------------------------- pedidos
 
+// ---------------------------------------------------------------- tracing (W3C traceparent)
+// O front inicia o trace de cada envio: gateway, request-service e todos os serviços seguintes
+// continuam o MESMO trace. Guardamos o traceId por pedido para o "Ver trace" abrir o trace exato.
+const traceIds = (() => { try { return JSON.parse(localStorage.getItem("voxticket.traces")) || {}; } catch { return {}; } })();
+const hex = (bytes) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, "0")).join("");
+function newTraceparent() {
+  const traceId = hex(16);
+  return { traceId, header: `00-${traceId}-${hex(8)}-01` };
+}
+function rememberTrace(requestId, traceId) {
+  traceIds[requestId] = traceId;
+  try { localStorage.setItem("voxticket.traces", JSON.stringify(Object.fromEntries(Object.entries(traceIds).slice(-200)))); } catch { /* sem storage */ }
+}
+
 function traceUrl(id) {
+  const traceId = traceIds[id];
+  // com o traceId abre direto o trace (cascata); sem ele (pedido de outro navegador) busca pelo requestId
+  const query = traceId || `{span.messaging.message.conversation_id="${id}"}`;
   const pane = {
     a: {
       datasource: "tempo",
-      queries: [{ refId: "A", datasource: { type: "tempo", uid: "tempo" }, queryType: "traceql",
-                  query: `{span.messaging.message.conversation_id="${id}"}` }],
-      range: { from: "now-1h", to: "now" },
+      queries: [{ refId: "A", datasource: { type: "tempo", uid: "tempo" }, queryType: "traceql", query }],
+      range: { from: "now-6h", to: "now" },
     },
   };
   return `${CONFIG.grafanaUrl}/explore?schemaVersion=1&orgId=1&panes=${encodeURIComponent(JSON.stringify(pane))}`;
@@ -195,9 +211,12 @@ async function postAudio(tenantId, blob, name) {
   const form = new FormData();
   form.append("tenantId", tenantId);
   form.append("file", blob, name);
-  const r = await fetch(`${CONFIG.apiBase}/audios`, { method: "POST", body: form });
+  const trace = newTraceparent();
+  const r = await fetch(`${CONFIG.apiBase}/audios`, { method: "POST", body: form, headers: { traceparent: trace.header } });
   if (r.status !== 202) throw new Error(`a API respondeu ${r.status}`);
-  return r.json();
+  const body = await r.json();
+  rememberTrace(body.requestId, trace.traceId);
+  return body;
 }
 
 async function send() {
