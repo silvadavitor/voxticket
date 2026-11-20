@@ -45,7 +45,10 @@ class BrokerWorker(Stoppable, ABC):
 
     @property
     def connected(self) -> bool:
-        return self._connection is not None and not self._connection.is_closed
+        # is_closed só muda num close() explícito: numa queda a conexão robusta segue "aberta" tentando
+        # reconectar. O evento `connected` é limpo na queda e marcado de novo ao reconectar (R6).
+        connection = self._connection
+        return connection is not None and not connection.is_closed and connection.connected.is_set()
 
     async def run(self) -> None:
         delay = 1

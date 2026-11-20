@@ -22,7 +22,8 @@ Passo a passo do deploy AWS: [`infra/README.md`](../infra/README.md).
 
 | Derrubar | O que acontece |
 |---|---|
-| request-service | API fora (sem 202). Eventos acumulam em `request-service.q`. Ao voltar, consome tudo e a rotina de timeout trata o que expirou |
+| uma réplica do request-service | A outra segue: o gateway manda as requisições para ela e ela consome a fila sozinha |
+| as 2 réplicas do request-service | API fora (sem 202). Eventos acumulam em `request-service.q`. Ao voltar, consome tudo e a rotina de timeout trata o que expirou |
 | quota-service | Pedidos ficam em `RECEIVED`. Ao voltar, processa; nada se perde |
 | ticket-service | Pedidos ficam em `TICKET_REQUESTED` até ele voltar, ou expiram e compensam |
 | notification-service | Só atrasa os avisos |

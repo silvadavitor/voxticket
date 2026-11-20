@@ -19,6 +19,10 @@ up: env ## sobe a infra + todos os serviços que já têm Dockerfile
 	docker compose up -d --build
 	@if [ -n "$(READY)" ]; then $(COMPOSE) up -d --build $(READY); fi
 	@echo "serviços no ar: $(or $(READY),nenhum ainda)"
+	@scripts/dev/seed.sh
+
+seed: ## cadastra o cliente da demo (tenant-demo, 1000 créditos) se ainda não existir
+	@scripts/dev/seed.sh
 
 svc: env ## sobe só um serviço e as dependências dele (make svc s=quota-service)
 	@test -n "$(s)" || { echo "uso: make svc s=<servico>"; exit 1; }

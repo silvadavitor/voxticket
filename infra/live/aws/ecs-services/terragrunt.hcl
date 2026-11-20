@@ -22,7 +22,7 @@ locals {
     "request-service" = {
       public            = true
       alb_path_patterns = []
-      desired_count     = 1
+      desired_count     = 2           # orquestrador sem ponto único de falha
       s3_access         = "readwrite" # upload do áudio e move para failed/
       autoscaling       = null
       environment = {
