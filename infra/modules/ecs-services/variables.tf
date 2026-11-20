@@ -22,8 +22,8 @@ variable "bucket_arn" {
   default     = "arn:aws:s3:::none"
 }
 
-variable "broker_name" {
-  description = "Nome do broker Amazon MQ (dimensão da métrica MessageCount). Obrigatório se algum serviço tiver autoscaling."
+variable "queue_metrics_namespace" {
+  description = "Namespace CloudWatch com MessageCount por fila (publicado pela instância do RabbitMQ). Obrigatório se algum serviço tiver autoscaling."
   type        = string
   default     = null
 }

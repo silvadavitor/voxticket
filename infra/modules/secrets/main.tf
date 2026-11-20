@@ -61,7 +61,7 @@ resource "aws_secretsmanager_secret_version" "master" {
 
 resource "aws_secretsmanager_secret" "broker" {
   name                    = "${var.name_prefix}/broker"
-  description             = "Credenciais do RabbitMQ / Amazon MQ"
+  description             = "Credenciais do RabbitMQ"
   recovery_window_in_days = var.recovery_window_in_days
 }
 

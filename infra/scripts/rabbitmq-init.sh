@@ -1,5 +1,5 @@
 #!/bin/sh
-# Env: BROKER_MGMT_URL (http://rabbitmq:15672 | https://b-xxx.mq.<region>.amazonaws.com),
+# Env: BROKER_MGMT_URL (local: http://rabbitmq:15672 · AWS: http://<ip privado da EC2>:15672),
 #      BROKER_USERNAME, BROKER_PASSWORD
 set -eu
 AUTH="$BROKER_USERNAME:$BROKER_PASSWORD"

@@ -3,7 +3,7 @@
 # - discoverable       → registrado no Cloud Map: <nome>.<namespace> (ex.: otel-collector.voxticket.internal)
 # - iam_secret_arns    → segredos que o CÓDIGO do serviço pode ler (só o próprio banco)
 # - s3_access          → none | read | readwrite no bucket de áudios
-# - autoscaling        → escala pelo backlog da fila no Amazon MQ (mensagens por task)
+# - autoscaling        → escala pelo backlog da fila (mensagens por task)
 
 data "aws_region" "current" {}
 
@@ -258,7 +258,7 @@ resource "aws_ecs_service" "this" {
 }
 
 # ---------------- autoescala pelo backlog da fila (bônus) ----------------
-# backlog por task = mensagens na fila (Amazon MQ) / tasks rodando (Container Insights).
+# backlog por task = mensagens na fila (publicadas pela EC2 do RabbitMQ) / tasks rodando (Container Insights).
 # Target tracking mantém esse valor perto de `backlog_per_task`.
 
 resource "aws_appautoscaling_target" "this" {
@@ -297,16 +297,8 @@ resource "aws_appautoscaling_policy" "backlog" {
         metric_stat {
           stat = "Average"
           metric {
-            namespace   = "AWS/AmazonMQ"
+            namespace   = var.queue_metrics_namespace
             metric_name = "MessageCount"
-            dimensions {
-              name  = "Broker"
-              value = var.broker_name
-            }
-            dimensions {
-              name  = "VirtualHost"
-              value = "/"
-            }
             dimensions {
               name  = "Queue"
               value = each.value.autoscaling.queue

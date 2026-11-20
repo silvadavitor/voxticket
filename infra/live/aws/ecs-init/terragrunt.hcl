@@ -1,6 +1,6 @@
 # Tasks one-off que preparam o ambiente (rodadas por infra/scripts/run-init-tasks.sh no workflow release):
 #   db-init       → cria 1 database + 1 usuário por serviço no RDS (ADR-003)
-#   rabbitmq-init → aplica rabbitmq/definitions.json no Amazon MQ (ADR-002)
+#   rabbitmq-init → aplica rabbitmq/definitions.json no RabbitMQ da EC2 (ADR-002)
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")
@@ -45,7 +45,7 @@ dependency "database" {
 dependency "messaging" {
   config_path                             = "../messaging"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
-  mock_outputs                            = { management_url = "https://mock" }
+  mock_outputs                            = { management_url = "http://10.0.0.10:15672" }
 }
 
 dependency "ecr" {

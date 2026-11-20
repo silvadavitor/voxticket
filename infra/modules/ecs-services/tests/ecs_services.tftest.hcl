@@ -19,7 +19,7 @@ variables {
   services_security_group_id = "sg-svc"
   alb_security_group_id      = "sg-alb"
   bucket_arn                 = "arn:aws:s3:::audios"
-  broker_name                = "broker"
+  queue_metrics_namespace    = "VoxTicket/RabbitMQ"
   services = {
     "request-service" = {
       image           = "img/request:1"

@@ -1,5 +1,6 @@
 # VPC sem NAT Gateway (custo): tasks Fargate em subnets públicas com IP público;
-# RDS e Amazon MQ em subnets privadas, acessíveis só pelo SG dos serviços.
+# RDS em subnets privadas; o broker (RabbitMQ em EC2) numa subnet pública só para ter saída, sem nenhuma
+# porta aberta para fora: banco e broker só aceitam conexão vinda do SG dos serviços.
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -11,10 +12,11 @@ module "vpc" {
 
   name = var.name
   cidr = var.cidr
-  azs  = slice(data.aws_availability_zones.available.names, 0, 2)
+  # 3 AZs: um nó do RabbitMQ em cada (o cluster sobrevive à queda de uma zona)
+  azs = slice(data.aws_availability_zones.available.names, 0, 3)
 
-  public_subnets  = [cidrsubnet(var.cidr, 8, 0), cidrsubnet(var.cidr, 8, 1)]
-  private_subnets = [cidrsubnet(var.cidr, 8, 10), cidrsubnet(var.cidr, 8, 11)]
+  public_subnets  = [for i in range(3) : cidrsubnet(var.cidr, 8, i)]
+  private_subnets = [for i in range(3) : cidrsubnet(var.cidr, 8, 10 + i)]
 
   enable_nat_gateway   = false
   enable_dns_hostnames = true
@@ -85,25 +87,64 @@ resource "aws_vpc_security_group_ingress_rule" "database_from_services" {
   ip_protocol                  = "tcp"
 }
 
-resource "aws_security_group" "broker" {
-  name        = "${var.name}-broker"
-  description = "Amazon MQ RabbitMQ"
+# Broker: 3 EC2 (um nó do RabbitMQ em cada) atrás de um NLB interno.
+# serviços → NLB (5672 AMQP, 15672 management) → nós; os nós conversam entre si (cluster Erlang).
+resource "aws_security_group" "broker_lb" {
+  name        = "${var.name}-broker-lb"
+  description = "NLB interno do RabbitMQ"
   vpc_id      = module.vpc.vpc_id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "broker_amqps" {
-  security_group_id            = aws_security_group.broker.id
+resource "aws_vpc_security_group_ingress_rule" "broker_lb_from_services" {
+  for_each                     = { amqp = 5672, management = 15672 }
+  security_group_id            = aws_security_group.broker_lb.id
   referenced_security_group_id = aws_security_group.services.id
-  from_port                    = 5671
-  to_port                      = 5671
+  from_port                    = each.value
+  to_port                      = each.value
+  ip_protocol                  = "tcp"
+  description                  = "${each.key} vindo dos serviços"
+}
+
+resource "aws_vpc_security_group_egress_rule" "broker_lb_to_nodes" {
+  for_each                     = { amqp = 5672, management = 15672 }
+  security_group_id            = aws_security_group.broker_lb.id
+  referenced_security_group_id = aws_security_group.broker.id
+  from_port                    = each.value
+  to_port                      = each.value
   ip_protocol                  = "tcp"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "broker_mgmt" {
+
+resource "aws_security_group" "broker" {
+  name        = "${var.name}-broker"
+  description = "Nos do RabbitMQ em EC2"
+  vpc_id      = module.vpc.vpc_id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "broker_from_lb" {
+  for_each                     = { amqp = 5672, management = 15672 }
   security_group_id            = aws_security_group.broker.id
-  referenced_security_group_id = aws_security_group.services.id
-  from_port                    = 443
-  to_port                      = 443
+  referenced_security_group_id = aws_security_group.broker_lb.id
+  from_port                    = each.value
+  to_port                      = each.value
   ip_protocol                  = "tcp"
-  description                  = "API de management (rabbitmq-init, receiver do OTel)"
+  description                  = "${each.key} vindo do NLB (inclui o health check)"
+}
+
+# Cluster: epmd (4369), distribuição Erlang (25672) e ferramentas de CLI (35672-35682), só entre os nós
+resource "aws_vpc_security_group_ingress_rule" "broker_cluster" {
+  for_each                     = { epmd = [4369, 4369], erlang = [25672, 25672], cli = [35672, 35682] }
+  security_group_id            = aws_security_group.broker.id
+  referenced_security_group_id = aws_security_group.broker.id
+  from_port                    = each.value[0]
+  to_port                      = each.value[1]
+  ip_protocol                  = "tcp"
+  description                  = "cluster: ${each.key}"
+}
+
+resource "aws_vpc_security_group_egress_rule" "broker_all" {
+  security_group_id = aws_security_group.broker.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "Saída: pacotes, imagem do RabbitMQ, Secrets Manager, CloudWatch, Session Manager e os outros nós"
 }

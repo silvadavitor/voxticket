@@ -124,9 +124,9 @@ dependency "messaging" {
   config_path                             = "../messaging"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
   mock_outputs = {
-    amqp_endpoint  = "amqps://mock:5671"
-    management_url = "https://mock"
-    broker_name    = "mock"
+    amqp_endpoint     = "amqp://10.0.0.10:5672"
+    management_url    = "http://10.0.0.10:15672"
+    metrics_namespace = "VoxTicket/RabbitMQ"
   }
 }
 
@@ -159,7 +159,7 @@ inputs = {
   alb_security_group_id      = dependency.network.outputs.alb_security_group_id
   discovery_namespace        = local.otel_namespace
   bucket_arn                 = dependency.storage.outputs.bucket_arn
-  broker_name                = dependency.messaging.outputs.broker_name
+  queue_metrics_namespace    = dependency.messaging.outputs.metrics_namespace
 
   common_environment = {
     ENVIRONMENT                 = include.root.locals.environment
@@ -200,7 +200,7 @@ inputs = {
     },
     # Observabilidade: a MESMA stack do ambiente local (ADR-004)
     {
-      # recebe OTLP dos serviços e lê as filas do Amazon MQ (Cloud Map: otel-collector.voxticket.internal)
+      # recebe OTLP dos serviços e lê as filas do RabbitMQ (Cloud Map: otel-collector.voxticket.internal)
       "otel-collector" = {
         image        = "otel/opentelemetry-collector-contrib:0.165.0"
         port         = 4317

@@ -1,4 +1,4 @@
-# Aplica rabbitmq/definitions.json via API de management (container local e Amazon MQ).
+# Aplica rabbitmq/definitions.json via API de management (container local e RabbitMQ da EC2 na AWS).
 FROM alpine:3.22
 RUN apk add --no-cache curl
 COPY rabbitmq/definitions.json /definitions.json
