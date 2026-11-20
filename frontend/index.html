@@ -18,6 +18,7 @@
     <div class="topbar-right">
       <span id="svc-request" class="chip chip-wait">request-service …</span>
       <span id="svc-ticket" class="chip chip-wait">ticket-service …</span>
+      <span id="svc-quota" class="chip chip-wait">quota-service …</span>
       <a class="link-btn" id="link-grafana" target="_blank" rel="noopener">Grafana</a>
       <a class="link-btn" id="link-rabbit" target="_blank" rel="noopener">RabbitMQ</a>
     </div>
@@ -26,6 +27,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab active" role="tab" data-tab="pedidos" aria-selected="true">Pedidos</button>
     <button class="tab" role="tab" data-tab="chamados" aria-selected="false">Chamados <span id="tickets-count" class="count"></span></button>
+    <button class="tab" role="tab" data-tab="clientes" aria-selected="false">Clientes</button>
   </nav>
 
   <!-- ===================== PEDIDOS ===================== -->
@@ -35,7 +37,8 @@
 
       <label class="field">
         <span>Cliente (tenant)</span>
-        <input id="tenant" value="tenant-demo" autocomplete="off">
+        <input id="tenant" value="tenant-demo" autocomplete="off" list="tenants-list">
+        <datalist id="tenants-list"></datalist>
       </label>
 
       <div class="record">
@@ -67,13 +70,14 @@
 
     <section class="card race">
       <h2>Corrida pelo recurso escasso <span class="tag">F5</span></h2>
-      <p class="muted">Dispara pedidos simultâneos para um cliente com cota limitada.
+      <p class="muted">Cria um cliente novo com a cota escolhida e dispara pedidos simultâneos para ele.
         Com cota 10, exatamente 10 devem virar chamado e o resto ser recusado.</p>
       <div class="race-form">
         <label class="field compact"><span>Pedidos</span><input id="race-n" type="number" min="1" max="200" value="100"></label>
-        <label class="field compact"><span>Cliente</span><input id="race-tenant" value="tenant-f5"></label>
+        <label class="field compact"><span>Cota</span><input id="race-quota" type="number" min="0" max="200" value="10"></label>
         <button id="btn-race" class="btn btn-primary" type="button">Disparar</button>
       </div>
+      <p id="race-msg" class="muted small" role="status"></p>
       <div class="race-board">
         <div class="stat"><span class="stat-n" id="race-sent">0</span><span>aceitos (202)</span></div>
         <div class="stat ok"><span class="stat-n" id="race-ok">0</span><span>chamados abertos</span></div>
@@ -100,6 +104,33 @@
             <tr><th>Chamado</th><th>Cliente</th><th>Categoria</th><th>Prioridade</th><th>Aberto em</th><th>Pedido</th></tr>
           </thead>
           <tbody id="tickets-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== CLIENTES ===================== -->
+  <main class="single" id="tab-clientes" hidden>
+    <section class="card">
+      <div class="card-head">
+        <h2>Clientes e créditos</h2>
+        <span class="muted small">GET/PUT /api/tenants · quota-service</span>
+      </div>
+      <p class="muted">Cada áudio reserva 1 crédito do cliente. Sem crédito, o pedido é recusado (F5).
+        Cliente que nunca foi cadastrado tem limite 0.</p>
+      <form id="tenant-form" class="race-form">
+        <label class="field compact"><span>Cliente</span><input id="tenant-id" placeholder="acme" required pattern="[A-Za-z0-9._\-]+" autocomplete="off"></label>
+        <label class="field compact"><span>Limite de créditos</span><input id="tenant-limit" type="number" min="0" max="1000000" value="10" required></label>
+        <button class="btn btn-primary" type="submit">Salvar</button>
+      </form>
+      <p id="tenant-msg" class="muted small" role="status"></p>
+      <p id="tenants-empty" class="empty muted">Nenhum cliente cadastrado.</p>
+      <div class="table-wrap">
+        <table class="tickets" id="tenants-table" hidden>
+          <thead>
+            <tr><th>Cliente</th><th>Limite</th><th>Usados</th><th>Disponíveis</th><th>Uso</th><th></th></tr>
+          </thead>
+          <tbody id="tenants-body"></tbody>
         </table>
       </div>
     </section>

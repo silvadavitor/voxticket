@@ -12,11 +12,13 @@ from app.application.ports import (
     ProcessedMessageRepository,
     QuotaRepository,
     ReservationRepository,
+    TenantAdmin,
     UnitOfWork,
     UnitOfWorkFactory,
 )
 from app.domain.events import IntegrationEvent
 from app.domain.reservation import Reservation, ReservationStatus
+from app.domain.tenant import Tenant
 
 
 class PostgresQuotaRepository(QuotaRepository):
@@ -43,6 +45,35 @@ class PostgresQuotaRepository(QuotaRepository):
             "UPDATE tenant_quota SET used = used - 1 WHERE tenant_id = $1 AND used > 0",
             tenant_id,
         )
+
+
+class PostgresTenantAdmin(TenantAdmin):
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def list(self) -> list[Tenant]:
+        rows = await self._pool.fetch("SELECT tenant_id, quota_limit, used FROM tenant_quota ORDER BY tenant_id")
+        return [Tenant(**dict(row)) for row in rows]
+
+    async def get(self, tenant_id: str) -> Tenant | None:
+        row = await self._pool.fetchrow(
+            "SELECT tenant_id, quota_limit, used FROM tenant_quota WHERE tenant_id = $1", tenant_id
+        )
+        return Tenant(**dict(row)) if row else None
+
+    async def set_limit(self, tenant_id: str, quota_limit: int) -> Tenant | None:
+        # o WHERE impede baixar o limite abaixo do que já foi reservado
+        row = await self._pool.fetchrow(
+            """
+            INSERT INTO tenant_quota (tenant_id, quota_limit, used) VALUES ($1, $2, 0)
+            ON CONFLICT (tenant_id) DO UPDATE SET quota_limit = EXCLUDED.quota_limit
+            WHERE tenant_quota.used <= EXCLUDED.quota_limit
+            RETURNING tenant_id, quota_limit, used
+            """,
+            tenant_id,
+            quota_limit,
+        )
+        return Tenant(**dict(row)) if row else None
 
 
 class PostgresReservationRepository(ReservationRepository):

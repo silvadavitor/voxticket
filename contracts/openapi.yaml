@@ -7,6 +7,7 @@ info:
     O gateway roteia por caminho, removendo o prefixo /api:
       /api/audios*  → request-service   (local: nginx do `frontend`; AWS: CloudFront → ALB)
       /api/tickets* → ticket-service
+      /api/tenants* → quota-service     (cadastro de clientes e limite de créditos)
     Os eventos assíncronos entre serviços estão em asyncapi.yaml.
 
 servers:
@@ -105,6 +106,57 @@ paths:
               schema: { $ref: "#/components/schemas/Ticket" }
         "404": { description: chamado não existe }
 
+  /tenants:
+    get:
+      summary: Lista os clientes com limite e uso de créditos (tela "Clientes")
+      operationId: listTenants
+      tags: [quota-service]
+      responses:
+        "200":
+          description: Clientes em ordem alfabética
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tenant" }
+
+  /tenants/{tenantId}:
+    get:
+      summary: Um cliente
+      operationId: getTenant
+      tags: [quota-service]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9._-]+$" } }
+      responses:
+        "200":
+          description: Cliente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { description: cliente não cadastrado }
+    put:
+      summary: Cadastra o cliente ou muda o limite de créditos (o uso é mantido)
+      operationId: setTenantLimit
+      tags: [quota-service]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9._-]+$" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quotaLimit]
+              properties:
+                quotaLimit: { type: integer, minimum: 0, example: 10 }
+      responses:
+        "200":
+          description: Cliente com o novo limite
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "409": { description: limite menor que os créditos já usados }
+
   /health:
     get:
       summary: Health check (todo serviço tem)
@@ -150,3 +202,12 @@ components:
         category: { type: string, example: TECNICO }
         priority: { type: [string, "null"], enum: [LOW, MEDIUM, HIGH, CRITICAL, null] }
         createdAt: { type: string, format: date-time }
+
+    Tenant:
+      type: object
+      required: [tenantId, quotaLimit, used, available]
+      properties:
+        tenantId: { type: string, example: acme }
+        quotaLimit: { type: integer, minimum: 0, example: 10 }
+        used: { type: integer, minimum: 0, description: créditos reservados ou consumidos }
+        available: { type: integer, minimum: 0 }

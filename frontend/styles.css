@@ -212,3 +212,8 @@ h2 { font-size: 1.25rem; margin-bottom: .9rem; }
 @media (max-width: 900px) {
   .tabs, .single { padding-left: 1rem; padding-right: 1rem; }
 }
+
+/* clientes */
+.bar { width: 120px; height: 8px; border-radius: 4px; background: var(--line, #e5e7eb); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--brand); }
+.bar.full > span { background: #dc2626; }
