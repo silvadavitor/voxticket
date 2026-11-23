@@ -55,12 +55,12 @@ regredir. Se fosse preciso ordem por pedido: particionar por `requestId` (consis
 | F7 | latência 20 s, `SAGA_TIMEOUT_MS=10000` | `EXPIRED` + crédito liberado; resultado atrasado `DISCARDED`; 0 tickets | linha do tempo por `correlationId` |
 | F8 | `--scale transcription-worker=3`, 30 áudios | carga dividida, sem duplicação | `select processed_by, count(*) from transcriptions group by 1` = 30 |
 
-## Bônus (até +1,0)
+## Bônus (até +1,0; cada item só conta se demonstrado)
 
-| Bônus | Plano | Dono |
+| Bônus | Situação | Como demonstrar |
 |---|---|---|
-| OpenTelemetry (tracing ponta a ponta) | SDK OTel nas 3 linguagens, `traceparent` no header AMQP, Collector → Grafana LGTM (traces, métricas, logs, dashboard) | infra/observabilidade + todos |
-| IaC que recria o ambiente | Terraform + Terragrunt (MiniStack e AWS) | infra |
-| CQRS | `request_status_view` alimentada por eventos | request-service |
-| Versionamento de eventos | `AudioCategorized` v1 e v2 convivendo | categorization-service |
-| Autoescala por fila | Target tracking: mensagens na fila (Amazon MQ) / tasks do worker, 2–6 réplicas | infra (feito) |
+| OpenTelemetry (tracing ponta a ponta) | **feito**: SDK OTel nas 3 linguagens + gateway, `traceparent` no HTTP, no header AMQP e no outbox; Collector → Grafana (Tempo, Prometheus, Loki) | enviar um áudio pelo front e abrir "Ver trace no Grafana": um trace só, do navegador à notificação |
+| IaC que recria o ambiente | **feito**: Terraform + Terragrunt, mesmos módulos no MiniStack e na AWS, testes de módulo no CI | `docker compose down -v && docker compose up -d --build` recria o ambiente local do zero (o `infra-init` roda o Terragrunt) |
+| Autoescala por fila | **feito na AWS, não demonstrável ao vivo**: target tracking por mensagens na fila (publicadas pelos nós do RabbitMQ no CloudWatch) ÷ tasks, mais CPU; worker 2–6, request 2–4 | mostrar o código (`infra/modules/ecs-services`) e o `terraform test`; a AWS não fica ligada por custo |
+| CQRS | não feito | — |
+| Versionamento de eventos | não feito (o envelope já tem `version` e os schemas são `*.v1`, prontos para um v2) | — |

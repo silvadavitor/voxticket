@@ -1,13 +1,5 @@
-// Package consumer implementa o consumidor idempotente (R1).
-//
-// Para cada mensagem, numa transação só:
-//
-//	INSERT processed_messages ON CONFLICT DO NOTHING  → 0 linhas = repetida: só ACK
-//	efeito (handler) + INSERT outbox
-//	COMMIT → só então ACK no broker
-//
-// Payload fora do contrato → Nack(requeue) → a fila quorum manda para a DLQ após x-delivery-limit=3 (F4).
-// Erro de infraestrutura (banco, S3) → retry com backoff SEGURANDO a mensagem (não vai para a DLQ).
+// Package consumer implementa o consumidor idempotente (R1): processed_messages, efeito e outbox numa
+// transação, ACK só depois do COMMIT. Payload inválido vai para a DLQ; erro de infraestrutura é retry.
 package consumer
 
 import (
@@ -74,7 +66,6 @@ func (c *Consumer) consume(ctx context.Context) error {
 	if err := ch.Qos(c.Prefetch, 0, false); err != nil {
 		return err
 	}
-	// a fila é criada pelo rabbitmq-init (rabbitmq/definitions.json): só conferimos que existe
 	if _, err := ch.QueueDeclarePassive(c.Queue, true, false, false, false, nil); err != nil {
 		return err
 	}

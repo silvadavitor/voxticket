@@ -57,7 +57,7 @@ O status é o estado da saga, guardado por este serviço: é ele que responde "e
 | Variável | Exemplo local |
 |---|---|
 | `SERVICE_NAME` | `request-service` |
-| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqps://<host>:5671`, sem credenciais) |
+| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqp://<NLB do cluster>:5672`, sem credenciais: elas vêm do Secrets Manager) |
 | `BROKER_USERNAME` / `BROKER_PASSWORD` | vazios local (credenciais já na URL); na AWS vêm do Secrets Manager e **têm precedência** sobre a URL |
 | `BROKER_EXCHANGE` | `events` |
 | `BROKER_QUEUE` | `request-service.q` |

@@ -12,9 +12,9 @@ servers:
     host: rabbitmq:5672
     protocol: amqp
   aws:
-    host: '{brokerHost}:5671'
-    protocol: amqps
-    description: Amazon MQ for RabbitMQ
+    host: '{brokerHost}:5672'
+    protocol: amqp
+    description: RabbitMQ em cluster (3 EC2) atrás de um NLB interno, rede privada da VPC
     variables:
       brokerHost:
         description: Vem de BROKER_URL

@@ -52,7 +52,7 @@ Leitura dos chamados para a tela "Chamados" do front (o gateway manda `/api/tick
 | VariÃ¡vel | Exemplo local |
 |---|---|
 | `SERVICE_NAME` | `ticket-service` |
-| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqps://<host>:5671`, sem credenciais) |
+| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqp://<NLB do cluster>:5672`, sem credenciais: elas vêm do Secrets Manager) |
 | `BROKER_USERNAME` / `BROKER_PASSWORD` | vazios local (credenciais jÃ¡ na URL); na AWS vÃªm do Secrets Manager e **tÃªm precedÃªncia** sobre a URL |
 | `BROKER_EXCHANGE` | `events` |
 | `BROKER_QUEUE` | `ticket-service.q` |

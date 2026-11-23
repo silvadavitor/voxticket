@@ -30,7 +30,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-      - name: Rede, S3, segredos, RDS, Amazon MQ, ECR, cluster
+      - name: Rede, S3, segredos, RDS, RabbitMQ (EC2), ECR, cluster
         working-directory: infra/live/aws
         run: |
           terragrunt run --all --backend-bootstrap \

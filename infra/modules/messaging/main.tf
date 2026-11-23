@@ -1,11 +1,5 @@
-# RabbitMQ em cluster: um nó por EC2, uma EC2 por AZ, a mesma imagem do ambiente local (ADR-002).
-# - filas quorum replicadas nos 3 nós: um nó (ou uma AZ) fora e as filas seguem com a maioria;
-# - NLB interno na frente: os serviços usam um endereço só e caem no nó que estiver de pé;
-# - cada nó tem o próprio EBS para /var/lib/rabbitmq: trocar a instância não apaga as filas;
-# - IP privado fixo por nó: o nome do nó (rabbit@rabbitmq-N) e o cluster sobrevivem a reinícios;
-# - sem SSH (Session Manager), IMDSv2, discos criptografados, senha e cookie lidos do Secrets Manager;
-# - cada nó publica a profundidade das filas no CloudWatch (autoescala do worker pela fila).
-# A topologia (exchanges, filas, DLQs) é aplicada pelo rabbitmq-init via API de management, igual ao local.
+# RabbitMQ em cluster: 3 EC2 (uma por AZ) atrás de um NLB interno, EBS próprio por nó. Ver ADR-002.
+# A topologia é aplicada pelo rabbitmq-init, igual ao local.
 
 data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
@@ -23,7 +17,7 @@ locals {
   }]
 }
 
-# ---- cookie do Erlang: igual em todos os nós, é o que autoriza um nó a entrar no cluster
+# cookie do Erlang: o mesmo em todos os nós
 resource "random_password" "cookie" {
   length  = 48
   special = false
@@ -40,7 +34,7 @@ resource "aws_secretsmanager_secret_version" "cookie" {
   secret_string = random_password.cookie.result
 }
 
-# ---- permissões dos nós: só os dois segredos do broker e as métricas do próprio namespace
+# nós: só os segredos do broker e as métricas do próprio namespace
 data "aws_iam_policy_document" "assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -91,7 +85,6 @@ resource "aws_iam_instance_profile" "broker" {
   role = aws_iam_role.broker.name
 }
 
-# ---- nós
 resource "aws_ebs_volume" "data" {
   count             = var.node_count
   availability_zone = data.aws_subnet.node[count.index].availability_zone
@@ -150,7 +143,7 @@ resource "aws_volume_attachment" "data" {
   instance_id = aws_instance.node[count.index].id
 }
 
-# ---- NLB interno: um endereço só para os serviços; health check tira do ar o nó que cair
+# NLB interno: um endereço só; o health check tira do ar o nó que cair
 resource "aws_lb" "broker" {
   name                             = substr("${var.name}-mq", 0, 32)
   internal                         = true

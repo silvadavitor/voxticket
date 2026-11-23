@@ -138,7 +138,7 @@ Tratamento de erro:
 |---|---|---|---|
 | Armazenamento de objetos | S3 (MiniStack) | S3 | ADR-001 |
 | Segredos | Secrets Manager (MiniStack) | Secrets Manager | ADR-001 |
-| Mensageria | RabbitMQ (container) | Amazon MQ for RabbitMQ | ADR-002 |
+| Mensageria | RabbitMQ (container) | RabbitMQ em cluster: 3 EC2, uma por zona, NLB interno | ADR-002 |
 | Banco de dados | 1 Postgres (container) por serviço | RDS Postgres (database + usuário por serviço) | ADR-003 |
 | Computação | docker compose | ECS Fargate | ADR-001 |
 | Front estático + CDN | S3 (MiniStack) + nginx simulando o CloudFront | S3 privado + CloudFront (HTTPS, `/api/*` → ALB) | ADR-005 |

@@ -56,12 +56,12 @@ precisasse: particionar por `requestId` (consistent-hash exchange). [requirement
 
 **Por que RabbitMQ e não SQS ou Kafka?** [ADR-002](adr/ADR-002-mensageria-rabbitmq.md)
 Filas quorum persistentes (F6 sem perda), DLQ e delivery-limit nativos, fanout do `TicketOpened`, mesmo
-protocolo local e na AWS (Amazon MQ). Kafka é log particionado, sem DLQ/reentrega por mensagem prontas.
+protocolo e imagem local e na AWS (cluster de 3 EC2). Kafka é log particionado, sem DLQ/reentrega por mensagem prontas.
 
 **Como as filas estão montadas?** [definitions.json](../rabbitmq/definitions.json)
 Uma exchange `events` do tipo topic, com routing key = nome do evento. Cada serviço que consome tem **uma**
 fila quorum (`<servico>.q`) ligada aos eventos que interessam a ele, e uma DLQ própria (`<servico>.dlq`) via
-`events.dlx`. São 6 filas e 6 DLQs. A topologia é versionada e aplicada no `make up`, ninguém cria fila à mão.
+`events.dlx`. São 6 filas e 6 DLQs. A topologia é versionada e aplicada no `docker compose up -d --build`, ninguém cria fila à mão.
 
 **Por que topic e não direct ou fanout?**
 Com topic o produtor só publica "aconteceu X" e não sabe quem consome. O `TicketOpened` cai em 3 filas
@@ -131,8 +131,8 @@ serviço responde pelo que é dele, e o gateway roteia por caminho.
 ## Nuvem, segurança e operação
 
 **Por que esses serviços da AWS?** [ADR-001](adr/ADR-001-nuvem-ministack-para-aws.md), [ADR-005](adr/ADR-005-front-estatico-s3-cloudfront.md)
-S3 para áudio (binário fora do banco, lifecycle), Secrets Manager (nenhuma senha no código), Amazon MQ e
-RDS gerenciados, ECS Fargate (sem servidor para administrar), CloudFront para o front (HTTPS de graça,
+S3 para áudio (binário fora do banco, lifecycle), Secrets Manager (nenhuma senha no código), RDS gerenciado, RabbitMQ em cluster de EC2
+(mesma imagem do local; no Fargate o disco é temporário), ECS Fargate (sem servidor para administrar), CloudFront para o front (HTTPS de graça,
 cache na borda).
 
 **Como é a segurança?** [security-scalability.md](security-scalability.md#segurança)
@@ -141,7 +141,7 @@ em rede privada, S3 privado/criptografado/só HTTPS, CI sem chave da AWS (OIDC),
 das imagens e do Terraform.
 
 **Como recriam o ambiente do zero?**
-Tudo é Terraform + Terragrunt, com os mesmos módulos local e na AWS. Local: `make up`. AWS: workflow
+Tudo é Terraform + Terragrunt, com os mesmos módulos local e na AWS. Local: `docker compose up -d --build`. AWS: workflow
 `infra-up` e `infra-destroy`. Nada é criado à mão no console.
 
 **Como sabem o que está acontecendo?**

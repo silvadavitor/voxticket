@@ -38,7 +38,7 @@ jobs:
       - name: Infra base + ecs-init (no-op se nada mudou)
         run: terragrunt run --all --filter '!./github-oidc' --filter '!./ecs-services' apply
 
-      - name: Tasks de init (databases/usuários no RDS, filas no Amazon MQ), idempotentes
+      - name: Tasks de init (databases/usuários no RDS, filas no RabbitMQ), idempotentes
         run: ../../scripts/run-init-tasks.sh
 
       - name: Serviços no ECS (só os que têm Dockerfile)

@@ -1,9 +1,4 @@
-# Serviços Fargate genéricos (microsserviços + otel-collector) e tasks de init (one-off).
-# - public = true      → atrás do ALB (só o request-service)
-# - discoverable       → registrado no Cloud Map: <nome>.<namespace> (ex.: otel-collector.voxticket.internal)
-# - iam_secret_arns    → segredos que o CÓDIGO do serviço pode ler (só o próprio banco)
-# - s3_access          → none | read | readwrite no bucket de áudios
-# - autoscaling        → escala pelo backlog da fila (mensagens por task)
+# Serviços Fargate (microsserviços e observabilidade), tasks de init, ALB e autoescala.
 
 data "aws_region" "current" {}
 
@@ -263,9 +258,7 @@ resource "aws_ecs_service" "this" {
   depends_on = [aws_lb_listener.http]
 }
 
-# ---------------- autoescala pelo backlog da fila (bônus) ----------------
-# backlog por task = mensagens na fila (publicadas pela EC2 do RabbitMQ) / tasks rodando (Container Insights).
-# Target tracking mantém esse valor perto de `backlog_per_task`.
+# ---------------- autoescala: mensagens na fila ÷ tasks rodando ----------------
 
 resource "aws_appautoscaling_target" "this" {
   for_each           = local.autoscaled
@@ -336,7 +329,7 @@ resource "aws_appautoscaling_policy" "backlog" {
   }
 }
 
-# ---------------- autoescala pela CPU (serviços com HTTP e picos de processamento) ----------------
+# ---------------- autoescala pela CPU ----------------
 resource "aws_appautoscaling_policy" "cpu" {
   for_each           = local.by_cpu
   name               = "${each.key}-cpu"
