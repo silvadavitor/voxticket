@@ -58,6 +58,40 @@ precisasse: particionar por `requestId` (consistent-hash exchange). [requirement
 Filas quorum persistentes (F6 sem perda), DLQ e delivery-limit nativos, fanout do `TicketOpened`, mesmo
 protocolo local e na AWS (Amazon MQ). Kafka é log particionado, sem DLQ/reentrega por mensagem prontas.
 
+**Como as filas estão montadas?** [definitions.json](../rabbitmq/definitions.json)
+Uma exchange `events` do tipo topic, com routing key = nome do evento. Cada serviço que consome tem **uma**
+fila quorum (`<servico>.q`) ligada aos eventos que interessam a ele, e uma DLQ própria (`<servico>.dlq`) via
+`events.dlx`. São 6 filas e 6 DLQs. A topologia é versionada e aplicada no `make up`, ninguém cria fila à mão.
+
+**Por que topic e não direct ou fanout?**
+Com topic o produtor só publica "aconteceu X" e não sabe quem consome. O `TicketOpened` cai em 3 filas
+(request, quota, notification) e o ticket-service nem sabe disso. Fanout mandaria tudo para todos; direct
+funcionaria, mas topic deixa assinar padrões se precisar.
+
+**Por que uma fila por serviço e não uma por evento?**
+Réplicas do **mesmo** serviço disputam a mesma fila (competing consumers, R4); serviços **diferentes**
+recebem cada um a sua cópia. Uma fila por evento multiplicaria filas e DLQs (o request-service sozinho
+consome 7 tipos) sem ganho aqui. O custo: um tipo de evento lento atrasa os outros na mesma fila. Se virar
+problema, separa-se só aquele evento.
+
+**Comando e evento na mesma exchange?**
+Sim. `TranscriptionRequested`, `TicketRequested` etc. são comandos (um destino); `TicketOpened` é evento
+(vários). A diferença está só em quantas filas estão ligadas à routing key. Uma exchange só simplifica a
+topologia e o rastreio.
+
+**Por que fila quorum e não clássica?**
+Quorum persiste em disco, é a fila recomendada pelo RabbitMQ para dado que não pode perder, e tem o
+`x-delivery-limit` nativo: o broker conta as tentativas e manda para a DLQ sozinho, mesmo se o consumidor
+reiniciar. Na clássica teríamos que contar no código.
+
+**prefetch=1 não deixa lento?**
+No worker é de propósito: uma transcrição leva segundos, e com prefetch maior uma réplica seguraria áudios
+enquanto outra fica parada. Com 1, quem está livre pega o próximo (F8).
+
+**O que fazer com o que cai na DLQ?**
+Fica guardado com o motivo. Alguém olha, corrige o produtor (ou o contrato) e reenvia pelo painel do
+RabbitMQ (shovel ou "move messages"). Não reprocessamos sozinhos: mensagem venenosa voltaria a falhar.
+
 **Por que as mensagens não levam o áudio?**
 Claim-check: brokers têm limite de tamanho e não são feitos para binário grande. A mensagem leva só a
 chave do S3.
@@ -74,7 +108,9 @@ Só devolve se a reserva está `RESERVED` (`UPDATE ... WHERE status = 'RESERVED'
 afeta 0 linhas.
 
 **Como escala?**
-Serviços sem estado (estado no Postgres, no S3 e na fila). O worker roda com 3 réplicas na mesma fila
+Serviços sem estado (estado no Postgres, no S3 e na fila). O request-service roda com 2 réplicas (o
+gateway reparte as requisições; o consumo trava a linha do pedido com `FOR UPDATE` e o timeout e o relay
+usam `SKIP LOCKED`, então as duas não pisam uma na outra). O worker roda com 3 réplicas na mesma fila
 (`prefetch=1`, F8) e, na AWS, tem autoescala pelo backlog da fila (mensagens ÷ tasks).
 [security-scalability.md](security-scalability.md#escalabilidade)
 
@@ -126,3 +162,10 @@ requestId), métricas (filas, DLQ, outbox, créditos) e logs com `trace_id`.
   at-least-once.
 - **"Por que 202 e não 201?"** O recurso ainda não está pronto: o pedido foi **aceito** para processamento
   assíncrono. 201 seria "criado e concluído".
+
+## Limites conhecidos
+
+- **Sem autenticação na API.** De propósito: o foco do trabalho é o sistema distribuído. O `tenantId` vem
+  no formulário e o `/tenants` é aberto. Em produção seria login (Cognito/JWT) com o cliente dentro do token
+  e o `/tenants` só para administrador.
+- **Categorização por palavras-chave.** É um exemplo: o que importa é o passo da saga, não o classificador.

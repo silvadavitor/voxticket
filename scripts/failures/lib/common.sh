@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."   # raiz do repo
 [[ -f .env ]] && set -a && source .env && set +a
 
-API=${API:-http://localhost:8080}
+API=${API:-http://localhost:8088/api} # pelo gateway, como o cliente (reparte entre as réplicas)
 MGMT=${MGMT:-http://localhost:15672}
 RMQ_AUTH="${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}"
 # áudios de teste com fala real em pt-BR (o worker transcreve com Whisper)
@@ -80,7 +80,7 @@ recreate() {
 }
 port_of() {
   case $1 in
-    request-service) echo 8080 ;; quota-service) echo 8081 ;; ticket-service) echo 8082 ;;
+    request-service) echo 8085 ;; quota-service) echo 8081 ;; ticket-service) echo 8082 ;;
     categorization-service) echo 8083 ;; notification-service) echo 8084 ;; transcription-worker) echo 8090 ;;
   esac
 }

@@ -122,7 +122,7 @@ Conferir:
 
 ```bash
 make ps
-curl localhost:8081/health      # quota (request 8080, ticket 8082, categorization 8083, notification 8084, worker 8090-8092)
+curl localhost:8081/health      # quota (request 8085-8086, ticket 8082, categorization 8083, notification 8084, worker 8090-8092)
 make logs s=quota-service       # logs ao vivo (Ctrl+C sai)
 ```
 
@@ -147,9 +147,9 @@ O que o seu serviço publicar aparece nas filas dos consumidores no painel do Ra
 ### 4. Testar o fluxo
 
 ```bash
-curl -F tenantId=tenant-demo -F file=@scripts/failures/lib/tec-urg.mp3 localhost:8080/audios
+curl -F tenantId=tenant-demo -F file=@scripts/failures/lib/tec-urg.mp3 localhost:8088/api/audios
 # → 202 {"requestId": "...", "statusUrl": "/audios/..."}
-curl localhost:8080/audios/<requestId>
+curl localhost:8088/api/audios/<requestId>
 ```
 
 Cenários de falha F1–F8: [scripts/failures/README.md](scripts/failures/README.md).
@@ -159,7 +159,8 @@ Cenários de falha F1–F8: [scripts/failures/README.md](scripts/failures/README
 | URL | O quê | Login |
 |---|---|---|
 | **http://localhost:8088** | **Front**: gravar ou enviar áudio, saga ao vivo, corrida F5 (modo demo se a API estiver fora) | — |
-| http://localhost:8080 | request-service (API) | — |
+| http://localhost:8088/api | API (gateway → request-service, 2 réplicas, e ticket/quota) | — |
+| http://localhost:8085, 8086 | `/health` de cada réplica do request-service | — |
 | http://localhost:8081…8084, 8090…8092 | `/health` de quota, ticket, categorization, notification, workers | — |
 | http://localhost:15672 | painel do RabbitMQ (filas, DLQs) | guest / guest |
 | http://localhost:3000 | **Grafana**: traces (Tempo), métricas (Prometheus), logs (Loki) e o dashboard *VoxTicket — Saga* | sem login (local) |

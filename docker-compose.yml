@@ -247,8 +247,12 @@ services:
   request-service:
     profiles: [apps]
     build: ./services/request-service
+    # 2 réplicas do orquestrador: o gateway reparte as requisições e as duas consomem a mesma fila.
+    # Seguro porque o consumo trava a linha do pedido (FOR UPDATE) e o timeout e o relay usam SKIP LOCKED.
+    deploy:
+      replicas: 2
     ports:
-      - "8080:8080"
+      - "8085-8086:8080"
     environment:
       <<: *app-env
       SERVICE_NAME: request-service
