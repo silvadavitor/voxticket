@@ -1,7 +1,7 @@
 # Banco e broker só aceitam conexão vinda dos serviços; API pode ser restrita por CIDR.
 mock_provider "aws" {
   mock_data "aws_availability_zones" {
-    defaults = { names = ["us-east-1a", "us-east-1b"] }
+    defaults = { names = ["us-east-1a", "us-east-1b", "us-east-1c"] }
   }
 }
 
@@ -18,8 +18,13 @@ run "banco_e_broker_privados" {
   }
 
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.broker_amqps.from_port == 5671 && aws_vpc_security_group_ingress_rule.broker_amqps.cidr_ipv4 == null
-    error_message = "Broker só pode receber AMQPS do SG dos serviços."
+    condition     = aws_vpc_security_group_ingress_rule.broker_lb_from_services["amqp"].from_port == 5672 && aws_vpc_security_group_ingress_rule.broker_lb_from_services["amqp"].cidr_ipv4 == null
+    error_message = "O NLB do broker só pode receber AMQP do SG dos serviços."
+  }
+
+  assert {
+    condition     = alltrue([for r in aws_vpc_security_group_ingress_rule.broker_cluster : r.cidr_ipv4 == null])
+    error_message = "As portas do cluster só abrem entre os próprios nós."
   }
 }
 

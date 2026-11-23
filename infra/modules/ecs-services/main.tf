@@ -3,7 +3,7 @@
 # - discoverable       → registrado no Cloud Map: <nome>.<namespace> (ex.: otel-collector.voxticket.internal)
 # - iam_secret_arns    → segredos que o CÓDIGO do serviço pode ler (só o próprio banco)
 # - s3_access          → none | read | readwrite no bucket de áudios
-# - autoscaling        → escala pelo backlog da fila no Amazon MQ (mensagens por task)
+# - autoscaling        → escala pelo backlog da fila (mensagens por task)
 
 data "aws_region" "current" {}
 
@@ -14,6 +14,8 @@ locals {
   default_public = try([for k, s in local.public_services : k if length(s.alb_path_patterns) == 0][0], null)
   discoverable   = { for k, s in var.services : k => s if s.discoverable }
   autoscaled     = { for k, s in var.services : k => s if s.autoscaling != null }
+  by_queue       = { for k, s in local.autoscaled : k => s if s.autoscaling.queue != null }
+  by_cpu         = { for k, s in local.autoscaled : k => s if s.autoscaling.cpu_target > 0 }
   create_alb     = length(local.public_services) > 0
 
   # services e init_tasks normalizados no mesmo tipo de objeto (para usar em for_each)
@@ -254,11 +256,15 @@ resource "aws_ecs_service" "this" {
     rollback = true
   }
 
+  lifecycle {
+    ignore_changes = [desired_count] # quem decide a quantidade depois de criado é a autoescala
+  }
+
   depends_on = [aws_lb_listener.http]
 }
 
 # ---------------- autoescala pelo backlog da fila (bônus) ----------------
-# backlog por task = mensagens na fila (Amazon MQ) / tasks rodando (Container Insights).
+# backlog por task = mensagens na fila (publicadas pela EC2 do RabbitMQ) / tasks rodando (Container Insights).
 # Target tracking mantém esse valor perto de `backlog_per_task`.
 
 resource "aws_appautoscaling_target" "this" {
@@ -271,7 +277,7 @@ resource "aws_appautoscaling_target" "this" {
 }
 
 resource "aws_appautoscaling_policy" "backlog" {
-  for_each           = local.autoscaled
+  for_each           = local.by_queue
   name               = "${each.key}-queue-backlog"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.this[each.key].resource_id
@@ -297,16 +303,8 @@ resource "aws_appautoscaling_policy" "backlog" {
         metric_stat {
           stat = "Average"
           metric {
-            namespace   = "AWS/AmazonMQ"
+            namespace   = var.queue_metrics_namespace
             metric_name = "MessageCount"
-            dimensions {
-              name  = "Broker"
-              value = var.broker_name
-            }
-            dimensions {
-              name  = "VirtualHost"
-              value = "/"
-            }
             dimensions {
               name  = "Queue"
               value = each.value.autoscaling.queue
@@ -334,6 +332,26 @@ resource "aws_appautoscaling_policy" "backlog" {
           }
         }
       }
+    }
+  }
+}
+
+# ---------------- autoescala pela CPU (serviços com HTTP e picos de processamento) ----------------
+resource "aws_appautoscaling_policy" "cpu" {
+  for_each           = local.by_cpu
+  name               = "${each.key}-cpu"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.this[each.key].resource_id
+  scalable_dimension = aws_appautoscaling_target.this[each.key].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.this[each.key].service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = each.value.autoscaling.cpu_target
+    scale_out_cooldown = 60
+    scale_in_cooldown  = 180
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
   }
 }

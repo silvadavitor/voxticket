@@ -24,7 +24,8 @@ locals {
       alb_path_patterns = []
       desired_count     = 2           # orquestrador sem ponto único de falha
       s3_access         = "readwrite" # upload do áudio e move para failed/
-      autoscaling       = null
+      # orquestrador: nunca menos de 2 réplicas
+      autoscaling = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 20 }
       environment = {
         SAGA_TIMEOUT_MS = get_env("SAGA_TIMEOUT_MS", "60000")
       }
@@ -34,7 +35,7 @@ locals {
       alb_path_patterns = ["/tenants", "/tenants/*"] # cadastro de clientes
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 3, queue = "quota-service.q", backlog_per_task = 20 }
       environment       = {}
     }
     "transcription-worker" = {
@@ -51,6 +52,7 @@ locals {
         max              = 6
         queue            = "transcription-worker.q"
         backlog_per_task = 5
+        cpu_target       = 70
       }
       environment = {
         TRANSCRIBE_LATENCY_MS_MIN = get_env("TRANSCRIBE_LATENCY_MS_MIN", "0")
@@ -64,7 +66,7 @@ locals {
       alb_path_patterns = []
       desired_count     = 1
       s3_access         = "read" # lê a transcrição
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 3, queue = "categorization-service.q", backlog_per_task = 20 }
       environment       = {}
     }
     "ticket-service" = {
@@ -72,7 +74,7 @@ locals {
       alb_path_patterns = ["/tickets", "/tickets/*"] # API de leitura dos chamados
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 3, queue = "ticket-service.q", backlog_per_task = 20 }
       environment       = {}
     }
     "notification-service" = {
@@ -80,8 +82,9 @@ locals {
       alb_path_patterns = []
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = null
-      environment       = {}
+      # só avisa: escala pela fila, sem política de CPU
+      autoscaling = { min = 1, max = 2, queue = "notification-service.q", backlog_per_task = 50, cpu_target = 0 }
+      environment = {}
     }
   }
 }
@@ -124,9 +127,9 @@ dependency "messaging" {
   config_path                             = "../messaging"
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
   mock_outputs = {
-    amqp_endpoint  = "amqps://mock:5671"
-    management_url = "https://mock"
-    broker_name    = "mock"
+    amqp_endpoint     = "amqp://10.0.0.10:5672"
+    management_url    = "http://10.0.0.10:15672"
+    metrics_namespace = "VoxTicket/RabbitMQ"
   }
 }
 
@@ -159,7 +162,7 @@ inputs = {
   alb_security_group_id      = dependency.network.outputs.alb_security_group_id
   discovery_namespace        = local.otel_namespace
   bucket_arn                 = dependency.storage.outputs.bucket_arn
-  broker_name                = dependency.messaging.outputs.broker_name
+  queue_metrics_namespace    = dependency.messaging.outputs.metrics_namespace
 
   common_environment = {
     ENVIRONMENT                 = include.root.locals.environment
@@ -200,7 +203,7 @@ inputs = {
     },
     # Observabilidade: a MESMA stack do ambiente local (ADR-004)
     {
-      # recebe OTLP dos serviços e lê as filas do Amazon MQ (Cloud Map: otel-collector.voxticket.internal)
+      # recebe OTLP dos serviços e lê as filas do RabbitMQ (Cloud Map: otel-collector.voxticket.internal)
       "otel-collector" = {
         image        = "otel/opentelemetry-collector-contrib:0.165.0"
         port         = 4317

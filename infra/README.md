@@ -9,7 +9,7 @@ infra/
 │   ├── secrets/             #   Secrets Manager (1 por serviço, broker, Grafana; master só na AWS)
 │   ├── network/             #   VPC (sem NAT) + security groups              [só aws]
 │   ├── database/            #   RDS Postgres                                 [só aws]
-│   ├── messaging/           #   Amazon MQ for RabbitMQ                       [só aws]
+│   ├── messaging/           #   RabbitMQ em EC2 (Docker + EBS)               [só aws]
 │   ├── ecr/                 #   repositórios de imagens                      [só aws]
 │   ├── ecs-cluster/         #   cluster, logs, IAM                           [só aws]
 │   ├── ecs-services/        #   Fargate: serviços, role por serviço, ALB, Cloud Map, autoescala [só aws]
@@ -116,11 +116,11 @@ já o `run --all` aprova sozinho.
 
 ## Custo estimado (us-east-1, ligado 24 h)
 
-RDS `db.t4g.micro` + Amazon MQ `mq.t3.micro` + 8 tasks Fargate 0.25 vCPU + ALB ≈ **US$ 3–4/dia**.
+RDS `db.t4g.micro` + EC2 `t4g.small` (RabbitMQ) + 8 tasks Fargate 0.25 vCPU + ALB ≈ **US$ 3–4/dia**.
 Suba perto da apresentação (`infra-up`) e destrua logo depois (`infra-destroy`).
 Sem NAT Gateway: as tasks usam subnet pública com IP público, e o RDS e o MQ ficam em subnet privada.
 
 ## Decisões e pendências
 
 - ADRs em [`docs/adr/`](../docs/adr/).
-- `TODO(infra)` no código: imagem do MiniStack, suporte a lifecycle no MiniStack, versão do RabbitMQ no Amazon MQ.
+- `TODO(infra)` no código: imagem do MiniStack, suporte a lifecycle no MiniStack.

@@ -1,0 +1,95 @@
+#!/bin/bash
+# Boot de um nó do cluster RabbitMQ (${node_name}): monta o disco das filas, sobe o RabbitMQ em Docker
+# e entra no cluster pelos nomes fixos dos outros nós. Liga também a publicação de métricas das filas.
+set -euo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+# ---- disco de dados (EBS próprio do nó). Formata só se estiver vazio: reaproveitado se a instância for trocada.
+SERIAL=${replace(volume_id, "-", "")}
+DEV=""
+for _ in $(seq 1 60); do
+  DEV=$(ls /dev/disk/by-id/*"$SERIAL" 2>/dev/null | head -n1 || true)
+  [ -n "$DEV" ] && break
+  sleep 5
+done
+[ -n "$DEV" ] || { echo "disco de dados não apareceu" >&2; exit 1; }
+blkid "$DEV" >/dev/null || mkfs -t xfs "$DEV"
+mkdir -p /data
+grep -q " /data " /etc/fstab || echo "$DEV /data xfs defaults,nofail 0 2" >> /etc/fstab
+mount -a
+mkdir -p /data/rabbitmq
+
+# ---- segredos (nunca no user data): usuário/senha e o cookie do cluster
+secret() { aws secretsmanager get-secret-value --region ${region} --secret-id "$1" --query SecretString --output text; }
+SECRET=$(secret '${secret_id}')
+BROKER_USER=$(printf '%s' "$SECRET" | python3 -c 'import json,sys; print(json.load(sys.stdin)["username"])')
+BROKER_PASS=$(printf '%s' "$SECRET" | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])')
+umask 077
+printf 'RABBITMQ_DEFAULT_USER=%s\nRABBITMQ_DEFAULT_PASS=%s\nRABBITMQ_NODENAME=rabbit@${node_name}\n' \
+  "$BROKER_USER" "$BROKER_PASS" > /etc/rabbitmq.env
+secret '${cookie_secret_id}' > /data/rabbitmq/.erlang.cookie
+chmod 400 /data/rabbitmq/.erlang.cookie
+chown -R 999:999 /data/rabbitmq # uid do usuário rabbitmq na imagem oficial
+
+# ---- formação do cluster: todos os nós conhecem a lista fixa; o primeiro a subir vira semente
+umask 022
+cat > /etc/rabbitmq-cluster.conf <<'CONF'
+cluster_formation.peer_discovery_backend = classic_config
+%{ for i, n in nodes ~}
+cluster_formation.classic_config.nodes.${i + 1} = rabbit@${n.name}
+%{ endfor ~}
+cluster_formation.target_cluster_size_hint = ${length(nodes)}
+cluster_partition_handling = pause_minority
+CONF
+
+# rede do host: AMQP, management e as portas do cluster direto na EC2; nomes dos nós → IPs fixos
+docker rm -f rabbitmq >/dev/null 2>&1 || true
+docker run -d --name rabbitmq --network host --restart unless-stopped \
+%{ for n in nodes ~}
+  --add-host ${n.name}:${n.ip} \
+%{ endfor ~}
+  -v /data/rabbitmq:/var/lib/rabbitmq \
+  -v /etc/rabbitmq-cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro \
+  --env-file /etc/rabbitmq.env \
+  ${image}
+
+# ---- profundidade das filas no CloudWatch a cada minuto (a autoescala do worker lê daqui).
+# Todos os nós publicam o mesmo número (a fila é do cluster): se um cair, os outros continuam.
+cat > /usr/local/bin/rabbitmq-metrics <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+. /etc/rabbitmq.env
+curl -fsS -u "$RABBITMQ_DEFAULT_USER:$RABBITMQ_DEFAULT_PASS" http://localhost:15672/api/queues \
+  | python3 -c '
+import json, sys
+queues = json.load(sys.stdin)
+data = [{"MetricName": "MessageCount", "Dimensions": [{"Name": "Queue", "Value": q["name"]}],
+         "Value": q.get("messages", 0), "Unit": "Count"} for q in queues]
+print(json.dumps(data))' > /tmp/rabbitmq-metrics.json
+[ "$(cat /tmp/rabbitmq-metrics.json)" = "[]" ] || \
+  aws cloudwatch put-metric-data --region ${region} --namespace '${metrics_namespace}' --metric-data file:///tmp/rabbitmq-metrics.json
+SCRIPT
+chmod 700 /usr/local/bin/rabbitmq-metrics
+
+cat > /etc/systemd/system/rabbitmq-metrics.service <<'UNIT'
+[Unit]
+Description=Publica a profundidade das filas do RabbitMQ no CloudWatch
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rabbitmq-metrics
+UNIT
+
+cat > /etc/systemd/system/rabbitmq-metrics.timer <<'UNIT'
+[Unit]
+Description=Métricas das filas a cada minuto
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now rabbitmq-metrics.timer
