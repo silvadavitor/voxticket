@@ -1,60 +1,24 @@
-# Atalhos do VoxTicket. `make` ou `make help` lista tudo.
+# Testes do VoxTicket. `make` ou `make help` lista tudo.
+# Subir, parar e ver logs é com o docker compose direto:
+#   docker compose up -d --build     docker compose ps     docker compose logs -f <serviço>
+#   docker compose down              docker compose down -v (apaga os dados)
 .DEFAULT_GOAL := help
-COMPOSE := docker compose --profile apps
 
 help: ## lista os comandos
-	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36mmake %-14s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9%_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36mmake %-14s\033[0m %s\n", $$1, $$2}'
 
-# ---------- local ----------
-env: ## cria o .env a partir do exemplo (se não existir)
-	@test -f .env || cp .env.example .env
-
-infra: env ## sobe só a infraestrutura local (MiniStack, RabbitMQ, Postgres, OTel)
-	docker compose up -d --build
-
-# serviços que já têm Dockerfile (os outros ainda não existem e quebrariam o build)
-READY := $(patsubst services/%/Dockerfile,%,$(wildcard services/*/Dockerfile))
-
-up: env ## sobe a infra + todos os serviços que já têm Dockerfile
-	docker compose up -d --build
-	@if [ -n "$(READY)" ]; then $(COMPOSE) up -d --build $(READY); fi
-	@echo "serviços no ar: $(or $(READY),nenhum ainda)"
-	@scripts/dev/seed.sh
-
-seed: ## cadastra o cliente da demo (tenant-demo, 1000 créditos) se ainda não existir
-	@scripts/dev/seed.sh
-
-svc: env ## sobe só um serviço e as dependências dele (make svc s=quota-service)
-	@test -n "$(s)" || { echo "uso: make svc s=<servico>"; exit 1; }
-	$(COMPOSE) up -d --build $(s)
-
-publish: ## publica um evento de teste no RabbitMQ (make publish t=CategorizationRequested f=evento.json)
-	@scripts/dev/publish.sh $(t) $(f)
-
-ps: ## estado dos containers
-	$(COMPOSE) ps -a
-
-logs: ## logs ao vivo (make logs s=quota-service)
-	$(COMPOSE) logs -f $(s)
-
-down: ## para tudo e mantém os dados
-	$(COMPOSE) down
-
-reset: ## para tudo e APAGA bancos, filas e S3 locais
-	$(COMPOSE) down -v
-
-check: ## verifica os requisitos (rápido, ~2 min): R3–R6 + F3, F4, F5, com placar no fim
+# ---------- requisitos e cenários de falha (precisam do sistema rodando) ----------
+check: ## verifica os requisitos (rápido): R3–R6 + F3, F4, F5, com placar no fim
 	@bash scripts/check.sh rapido
 
 check-all: ## verifica TODOS os requisitos e cenários F1–F8 (~10–15 min), com placar
 	@bash scripts/check.sh completo
 
-f%: ## roda um cenário de falha (make f5)
+f%: ## roda um cenário de falha narrado (make f5; PAUSA=1 make f5 para passo a passo)
 	@ls scripts/failures/F$*-*.sh >/dev/null && bash scripts/failures/F$*-*.sh
 
-# ---------- observabilidade ----------
-grafana: ## abre o Grafana local (traces, métricas, logs, dashboard VoxTicket)
-	@echo "http://localhost:3000/d/voxticket-saga"; (xdg-open http://localhost:3000/d/voxticket-saga >/dev/null 2>&1 || open http://localhost:3000/d/voxticket-saga >/dev/null 2>&1 || true)
+publish: ## publica um evento de teste no RabbitMQ (make publish t=CategorizationRequested f=evento.json)
+	@scripts/dev/publish.sh $(t) $(f)
 
 otel-test: ## manda traces, métricas e logs sintéticos pelo collector (testa o pipeline sem serviço pronto)
 	@for sig in traces metrics logs; do \
@@ -72,7 +36,7 @@ test: ## valida infra: fmt, validate e testes dos módulos Terraform, HCL do Ter
 	   if ls tests/*.tftest.hcl >/dev/null 2>&1; then terraform test -no-color; fi) || exit 1; \
 	done
 	cd infra/live && terragrunt hcl fmt --check
-	docker compose --env-file .env.example --profile apps config -q
+	docker compose --env-file .env.example config -q
 
 # ---------- AWS ----------
 # O caminho oficial é o GitHub Actions (infra-up / deploy / infra-destroy).
@@ -100,4 +64,4 @@ aws-down: ## [local] destrói tudo na AWS
 	$(aws-check)
 	$(AWS_SH) down
 
-.PHONY: help env infra up svc publish ps logs down reset test check check-all grafana otel-test aws-bootstrap aws-up aws-down aws-status aws-deploy
+.PHONY: help check check-all publish otel-test test aws-bootstrap aws-up aws-down aws-status aws-deploy

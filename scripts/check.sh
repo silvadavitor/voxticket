@@ -15,7 +15,7 @@ log "Pré-requisito: todos os serviços respondendo"
 down=()
 for s in $SERVICES; do health "$s" >/dev/null || down+=("$s"); done
 if (( ${#down[@]} )); then
-  nok "fora do ar: ${down[*]}  →  rode 'make up' e espere uns segundos"
+  nok "fora do ar: ${down[*]}  →  rode 'docker compose up -d --build' e espere uns segundos"
   exit 1
 fi
 ok "6 serviços respondendo no /health"

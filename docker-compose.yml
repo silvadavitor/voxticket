@@ -1,11 +1,4 @@
-# Sobe o sistema inteiro localmente (MiniStack + RabbitMQ + 1 Postgres por serviço + serviços).
-#
-#   cp .env.example .env
-#   docker compose up -d                      # só infraestrutura
-#   docker compose --profile apps up -d       # infraestrutura + microsserviços
-#
-# TODO(entrega): quando todos os serviços tiverem Dockerfile, remover `profiles: [apps]`
-# para que um único `docker compose up` suba tudo (exigência do enunciado).
+# Sistema inteiro local: docker compose up -d --build
 
 name: voxticket
 
@@ -19,7 +12,6 @@ x-app-env: &app-env
   BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
   BROKER_EXCHANGE: events
   DB_PORT: "5432"
-  # OpenTelemetry: variáveis padrão da spec, valem para .NET, Java e Python
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
   OTEL_EXPORTER_OTLP_PROTOCOL: grpc
   OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${ENVIRONMENT:-local},service.namespace=voxticket
@@ -29,8 +21,7 @@ x-app-env: &app-env
   OTEL_LOGS_EXPORTER: otlp
   OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
 
-# Um Postgres por serviço (banco por serviço). Usuário/senha/db iguais ao segredo
-# voxticket/local/db/<servico> criado pelo infra-init.
+# Um Postgres por serviço; credenciais iguais ao segredo voxticket/local/db/<servico>.
 x-postgres: &postgres
   image: postgres:17-alpine
   healthcheck:
@@ -56,7 +47,6 @@ services:
       S3_PERSIST: "1" # sem isso os áudios somem quando o MiniStack reinicia
     volumes:
       - ministack-data:/tmp/ministack-data # S3_DATA_DIR da imagem
-    # a imagem já traz healthcheck (GET /_ministack/health)
 
   rabbitmq:
     image: rabbitmq:4.1-management
@@ -159,8 +149,7 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       TG_STATE_DIR: /state
       TG_DOWNLOAD_DIR: /state/.terragrunt-cache
-      # cache de providers do Terragrunt: seguro com as units aplicando em paralelo
-      # (o TF_PLUGIN_CACHE_DIR do Terraform corrompe com instalações concorrentes)
+      # cache do Terragrunt (o do Terraform corrompe com units em paralelo)
       TG_PROVIDER_CACHE: "1"
       TG_PROVIDER_CACHE_DIR: /plugins
     volumes:
@@ -171,8 +160,7 @@ services:
       ministack:
         condition: service_healthy
 
-  # Front estático: arquivos no S3 (MiniStack, publicados pelo infra-init via Terraform);
-  # este nginx faz o papel do CloudFront (site do bucket + /api → request-service). http://localhost:8088
+  # Papel do CloudFront + ALB: site do bucket S3 e /api → serviços. http://localhost:8088
   frontend:
     image: nginx:1.30-alpine-otel
     ports:
@@ -186,7 +174,6 @@ services:
       otel-collector:
         condition: service_started
 
-  # Aplica rabbitmq/definitions.json (exchanges, filas quorum, DLQs)
   rabbitmq-init:
     build:
       context: .
@@ -199,10 +186,22 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  # Cadastra o cliente da demo (tenant-demo) e termina; cliente novo começa sem crédito.
+  seed:
+    build:
+      context: .
+      dockerfile: infra/docker/rabbitmq-init.Dockerfile
+    entrypoint: ["/bin/sh", "/seed.sh"]
+    volumes:
+      - ./scripts/dev/seed.sh:/seed.sh:ro
+    environment:
+      API: http://quota-service:8080
+    depends_on:
+      quota-service:
+        condition: service_started
+
   # ============================ observabilidade ============================
 
-  # Recebe OTLP dos serviços (traces, métricas, logs), lê a profundidade das filas do RabbitMQ
-  # e envia tudo para a stack LGTM abaixo.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.165.0
     command: ["--config=/etc/otelcol/config.yaml"]
@@ -220,8 +219,7 @@ services:
     depends_on:
       - lgtm
 
-  # Grafana + Tempo (traces) + Prometheus (métricas) + Loki (logs), dashboard VoxTicket embutido.
-  # http://localhost:3000 (local: sem login)
+  # Grafana + Tempo + Prometheus + Loki. http://localhost:3000
   lgtm:
     build:
       context: .
@@ -231,7 +229,6 @@ services:
     volumes:
       - lgtm-data:/data
 
-  # Coletor de logs: lê o stdout de todos os containers do projeto e envia para o Loki (Grafana)
   alloy:
     image: grafana/alloy:v1.22.0
     command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy"]
@@ -242,13 +239,10 @@ services:
       - lgtm
 
   # ============================ microsserviços ============================
-  # Cada dono: crie services/<servico>/Dockerfile. Contrato de env em services/<servico>/README.md.
 
   request-service:
-    profiles: [apps]
     build: ./services/request-service
-    # 2 réplicas do orquestrador: o gateway reparte as requisições e as duas consomem a mesma fila.
-    # Seguro porque o consumo trava a linha do pedido (FOR UPDATE) e o timeout e o relay usam SKIP LOCKED.
+    # seguro com réplicas: FOR UPDATE no pedido, SKIP LOCKED no timeout e no relay
     deploy:
       replicas: 2
     ports:
@@ -267,7 +261,6 @@ services:
         condition: service_healthy
 
   quota-service:
-    profiles: [apps]
     build: ./services/quota-service
     ports:
       - "8081:8080"
@@ -284,7 +277,6 @@ services:
         condition: service_healthy
 
   transcription-worker:
-    profiles: [apps]
     build:
       context: ./services/transcription-worker
       args:
@@ -293,8 +285,7 @@ services:
       - "8090-8092:8080" # 1 porta por réplica
     deploy:
       replicas: 3 # R4 / F8
-      # Whisper usa todos os núcleos e picos de memória ao transcrever: limita cada réplica para a máquina
-      # nunca travar (no pior caso o Docker derruba só a réplica e a mensagem volta para a fila)
+      # o Whisper usa todos os núcleos; limitado para a máquina não travar
       resources:
         limits:
           cpus: "2"
@@ -317,7 +308,6 @@ services:
         condition: service_healthy
 
   categorization-service:
-    profiles: [apps]
     build: ./services/categorization-service
     ports:
       - "8083:8080"
@@ -334,7 +324,6 @@ services:
         condition: service_healthy
 
   ticket-service:
-    profiles: [apps]
     build: ./services/ticket-service
     ports:
       - "8082:8080"
@@ -351,7 +340,6 @@ services:
         condition: service_healthy
 
   notification-service:
-    profiles: [apps]
     build: ./services/notification-service
     ports:
       - "8084:8080"
