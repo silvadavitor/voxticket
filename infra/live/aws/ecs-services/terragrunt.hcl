@@ -24,7 +24,8 @@ locals {
       alb_path_patterns = []
       desired_count     = 2           # orquestrador sem ponto único de falha
       s3_access         = "readwrite" # upload do áudio e move para failed/
-      autoscaling       = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 20 } # orquestrador: nunca menos de 2
+      # orquestrador: nunca menos de 2 réplicas
+      autoscaling = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 20 }
       environment = {
         SAGA_TIMEOUT_MS = get_env("SAGA_TIMEOUT_MS", "60000")
       }
@@ -81,8 +82,9 @@ locals {
       alb_path_patterns = []
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = { min = 1, max = 2, queue = "notification-service.q", backlog_per_task = 50, cpu_target = 0 } # só avisa: escala pela fila
-      environment       = {}
+      # só avisa: escala pela fila, sem política de CPU
+      autoscaling = { min = 1, max = 2, queue = "notification-service.q", backlog_per_task = 50, cpu_target = 0 }
+      environment = {}
     }
   }
 }
