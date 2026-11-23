@@ -27,6 +27,7 @@ variables {
       public          = true
       s3_access       = "readwrite"
       iam_secret_arns = ["arn:aws:secretsmanager:us-east-1:000000000000:secret:voxticket/test/db/request-service-abc"]
+      autoscaling     = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 10 }
     }
     "quota-service" = {
       image           = "img/quota:1"
@@ -82,17 +83,27 @@ run "alb_so_para_api_publica" {
   }
 }
 
-run "autoescala_do_worker" {
+run "autoescala" {
   command = plan
 
   assert {
-    condition     = keys(aws_appautoscaling_target.this) == ["transcription-worker"]
-    error_message = "Só o worker tem autoescala."
+    condition     = keys(aws_appautoscaling_target.this) == ["request-service", "transcription-worker"]
+    error_message = "Só quem declarou autoscaling ganha autoescala."
+  }
+
+  assert {
+    condition     = keys(aws_appautoscaling_policy.backlog) == ["request-service", "transcription-worker"] && keys(aws_appautoscaling_policy.cpu) == ["request-service", "transcription-worker"]
+    error_message = "Cada serviço autoescalado tem política pela fila e pela CPU."
+  }
+
+  assert {
+    condition     = aws_appautoscaling_target.this["request-service"].min_capacity >= 2
+    error_message = "O orquestrador nunca fica com menos de 2 réplicas."
   }
 
   assert {
     condition     = aws_appautoscaling_target.this["transcription-worker"].min_capacity >= 2
-    error_message = "Mínimo de 2 réplicas para manter o R4."
+    error_message = "Mínimo de 2 réplicas do worker para manter o R4."
   }
 }
 

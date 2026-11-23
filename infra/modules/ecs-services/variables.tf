@@ -91,11 +91,14 @@ variable "services" {
     secrets           = optional(map(string), {})
     iam_secret_arns   = optional(list(string), [])
     s3_access         = optional(string, "none")
+    # autoescala: pela fila (mensagens esperando por task) e/ou pela CPU média. A AWS aumenta se qualquer
+    # política pedir e só diminui quando todas concordam.
     autoscaling = optional(object({
       min              = number
       max              = number
-      queue            = string
-      backlog_per_task = optional(number, 5)
+      queue            = optional(string)     # fila consumida; null = sem política de backlog
+      backlog_per_task = optional(number, 5)  # mensagens por task que a política tenta manter
+      cpu_target       = optional(number, 60) # % de CPU média; 0 = sem política de CPU
     }))
   }))
 

@@ -24,7 +24,7 @@ locals {
       alb_path_patterns = []
       desired_count     = 2           # orquestrador sem ponto único de falha
       s3_access         = "readwrite" # upload do áudio e move para failed/
-      autoscaling       = null
+      autoscaling       = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 20 } # orquestrador: nunca menos de 2
       environment = {
         SAGA_TIMEOUT_MS = get_env("SAGA_TIMEOUT_MS", "60000")
       }
@@ -34,7 +34,7 @@ locals {
       alb_path_patterns = ["/tenants", "/tenants/*"] # cadastro de clientes
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 3, queue = "quota-service.q", backlog_per_task = 20 }
       environment       = {}
     }
     "transcription-worker" = {
@@ -51,6 +51,7 @@ locals {
         max              = 6
         queue            = "transcription-worker.q"
         backlog_per_task = 5
+        cpu_target       = 70
       }
       environment = {
         TRANSCRIBE_LATENCY_MS_MIN = get_env("TRANSCRIBE_LATENCY_MS_MIN", "0")
@@ -64,7 +65,7 @@ locals {
       alb_path_patterns = []
       desired_count     = 1
       s3_access         = "read" # lê a transcrição
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 3, queue = "categorization-service.q", backlog_per_task = 20 }
       environment       = {}
     }
     "ticket-service" = {
@@ -72,7 +73,7 @@ locals {
       alb_path_patterns = ["/tickets", "/tickets/*"] # API de leitura dos chamados
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 3, queue = "ticket-service.q", backlog_per_task = 20 }
       environment       = {}
     }
     "notification-service" = {
@@ -80,7 +81,7 @@ locals {
       alb_path_patterns = []
       desired_count     = 1
       s3_access         = "none"
-      autoscaling       = null
+      autoscaling       = { min = 1, max = 2, queue = "notification-service.q", backlog_per_task = 50, cpu_target = 0 } # só avisa: escala pela fila
       environment       = {}
     }
   }
