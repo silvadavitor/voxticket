@@ -4,7 +4,7 @@ Um script por cenário. Cada um **provoca a falha, confere o resultado com ✅/�
 normal**. Todos usam um cliente novo a cada execução, então dá para rodar quantas vezes quiser.
 
 ```bash
-make up            # sistema inteiro no ar
+docker compose up -d --build            # sistema inteiro no ar
 make f5            # roda um cenário (f1 … f8)
 PAUSA=1 make f6    # para a cada passo (Enter continua): tempo de mostrar Grafana/RabbitMQ
 ```

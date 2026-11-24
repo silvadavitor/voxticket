@@ -44,7 +44,7 @@ Schemas em [`contracts/schemas/`](../../contracts/schemas/). Não altere um cont
 | Variável | Exemplo local |
 |---|---|
 | `SERVICE_NAME` | `transcription-worker` |
-| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqps://<host>:5671`, sem credenciais) |
+| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqp://<NLB do cluster>:5672`, sem credenciais: elas vêm do Secrets Manager) |
 | `BROKER_USERNAME` / `BROKER_PASSWORD` | vazios local (credenciais já na URL); na AWS vêm do Secrets Manager e **têm precedência** sobre a URL |
 | `BROKER_EXCHANGE` | `events` |
 | `BROKER_QUEUE` | `transcription-worker.q` |
@@ -107,7 +107,7 @@ combinar. Testado de ponta a ponta em 18/11/2026: 10/10 pedidos transcritos e ca
 ## Rodar e testar
 
 ```bash
-docker compose --profile apps up -d --build transcription-worker   # 3 réplicas, portas 8090-8092
+docker compose up -d --build transcription-worker   # 3 réplicas, portas 8090-8092
 curl localhost:8090/health
 ```
 

@@ -11,7 +11,7 @@ desenvolver sem custo e sem depender de conta.
   ambientes: `infra/live/ministack` (local) e `infra/live/aws` (entrega).
 - Os mesmos módulos servem aos dois ambientes. No MiniStack o provider aponta para `AWS_ENDPOINT_URL`.
 - Serviços AWS consumidos: **S3** (áudios e transcrições), **Secrets Manager** (credenciais),
-  **RDS Postgres**, **Amazon MQ** e **ECS Fargate** + **ECR** (computação).
+  **RDS Postgres**, **RabbitMQ em EC2** (cluster de 3 nós, ADR-002) e **ECS Fargate** + **ECR** (computação).
 - O código dos serviços usa o SDK AWS padrão. Com `AWS_ENDPOINT_URL` definido ele fala com o
   MiniStack; vazio, fala com a AWS.
 
@@ -26,6 +26,6 @@ desenvolver sem custo e sem depender de conta.
   prefetch, o que não combina com o modelo de invocação do Lambda.
 
 ## Custo (AWS)
-Instâncias mínimas (`db.t4g.micro`, `mq.t3.micro`, Fargate 0.25 vCPU), sem NAT Gateway (tasks em
-subnets públicas com IP público; RDS e MQ em subnets privadas). Alerta de orçamento antes do primeiro
+Instâncias mínimas (`db.t4g.micro`, 3 × `t4g.small` do RabbitMQ, Fargate 0.25 vCPU), sem NAT Gateway (tasks em
+subnets públicas com IP público; RDS em subnets privadas; nós do RabbitMQ sem nenhuma porta aberta para fora). Alerta de orçamento antes do primeiro
 deploy. Rodar `terragrunt run --all destroy` depois da apresentação.

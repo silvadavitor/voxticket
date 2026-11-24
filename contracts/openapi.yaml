@@ -74,6 +74,28 @@ paths:
               schema: { $ref: "#/components/schemas/AudioRequest" }
         "404": { description: pedido não existe }
 
+  /audios/{id}/transcript:
+    get:
+      summary: Texto transcrito do áudio (lido do S3)
+      operationId: getTranscript
+      tags: [request-service]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Transcrição
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, text]
+                properties:
+                  requestId: { type: string, format: uuid }
+                  text: { type: string }
+                  language: { type: string, nullable: true }
+        "404": { description: pedido não existe ou ainda não foi transcrito }
+        "503": { description: armazenamento indisponível }
+
   /tickets:
     get:
       summary: Lista os chamados abertos (tela "Chamados")

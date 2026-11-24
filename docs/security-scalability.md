@@ -7,7 +7,7 @@
 | Segredos | Nenhuma senha no código ou no git. Credenciais no **Secrets Manager**, geradas pelo Terraform na AWS (`random_password`). O ECS injeta as do broker; o código lê só o segredo do próprio banco | `infra/modules/secrets`, `.env` fora do git |
 | Menor privilégio (IAM) | **Uma task role por serviço**: cada uma lê só o segredo do próprio banco e tem só o acesso ao S3 de que precisa (`none`/`read`/`readwrite`). Só o `db-init` lê o usuário master | `infra/modules/ecs-services`, `infra/live/aws/ecs-services` |
 | Banco por serviço | Local: um container por serviço. AWS: um database e um usuário por serviço, com `REVOKE ALL ... FROM PUBLIC` | ADR-003, `infra/scripts/db-init.sh` |
-| Rede | RDS e Amazon MQ em **subnets privadas**, sem IP público. Security groups só aceitam conexões vindas do SG dos serviços (5432, 5671). O ALB pode ser restrito por CIDR (`API_ALLOWED_CIDRS`) | `infra/modules/network` |
+| Rede | RDS em **subnets privadas**, sem IP público. Os nós do RabbitMQ só aceitam conexão do NLB interno (5672, 15672) e uns dos outros (portas do cluster); o NLB só aceita os serviços. Security groups nunca abrem CIDR para banco ou broker. O ALB pode ser restrito por CIDR (`API_ALLOWED_CIDRS`) | `infra/modules/network` |
 | Criptografia em trânsito | Broker via **AMQPS (TLS)**. Bucket com policy que **nega acesso sem HTTPS**. RDS Postgres 17 exige SSL por padrão (`rds.force_ssl`) | `messaging`, `storage` |
 | Criptografia em repouso | S3 com SSE-AES256 e versionamento. RDS com `storage_encrypted` | `storage`, `database` |
 | S3 | Bloqueio total de acesso público. Lifecycle apaga `failed/` em 7 dias | `infra/modules/storage` |
@@ -29,7 +29,7 @@
 | Mecanismo | Detalhe |
 |---|---|
 | Consumidores concorrentes (R4) | O `transcription-worker` roda com 3 réplicas na mesma fila e `prefetch=1`. A idempotência evita efeito duplicado |
-| **Autoescala pela fila** (bônus) | Na AWS, Application Auto Scaling com target tracking na métrica `mensagens na fila / tasks rodando` (Amazon MQ `MessageCount` ÷ Container Insights `RunningTaskCount`). Alvo de 5 mensagens por task, de 2 a 6 réplicas |
+| **Autoescala pela fila** (bônus) | Na AWS, Application Auto Scaling com target tracking na métrica `mensagens na fila / tasks rodando` (`MessageCount` que os nós do RabbitMQ publicam no CloudWatch ÷ Container Insights `RunningTaskCount`), mais uma política por CPU. Worker de 2 a 6 tasks (alvo de 5 mensagens por task), request-service de 2 a 4, os outros de 1 a 3. Configurada e testada no Terraform (`terraform test`); como a AWS não fica ligada, não é demonstrada ao vivo |
 | Serviços sem estado | Todo estado fica no Postgres, no S3 ou na fila, então qualquer serviço pode ganhar réplicas. Concorrência no recurso escasso é resolvida no banco (R2), não em memória |
 | Desacoplamento | Fila durável entre serviços: um pico de áudios vira backlog, não erro. A API responde 202 e não bloqueia |
 | Claim-check | As mensagens carregam só a chave do S3, nunca o áudio, então o tamanho da mensagem não cresce com o arquivo |

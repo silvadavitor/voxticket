@@ -1,12 +1,11 @@
 #!/bin/bash
-# Boot de um nó do cluster RabbitMQ (${node_name}): monta o disco das filas, sobe o RabbitMQ em Docker
-# e entra no cluster pelos nomes fixos dos outros nós. Liga também a publicação de métricas das filas.
+# Boot de um nó do RabbitMQ: disco, segredos, cluster e métricas das filas.
 set -euo pipefail
 
 dnf install -y docker
 systemctl enable --now docker
 
-# ---- disco de dados (EBS próprio do nó). Formata só se estiver vazio: reaproveitado se a instância for trocada.
+# EBS do nó: só formata se estiver vazio (reaproveitado na troca da instância)
 SERIAL=${replace(volume_id, "-", "")}
 DEV=""
 for _ in $(seq 1 60); do
@@ -21,7 +20,7 @@ grep -q " /data " /etc/fstab || echo "$DEV /data xfs defaults,nofail 0 2" >> /et
 mount -a
 mkdir -p /data/rabbitmq
 
-# ---- segredos (nunca no user data): usuário/senha e o cookie do cluster
+# segredos vêm do Secrets Manager, nunca do user data
 secret() { aws secretsmanager get-secret-value --region ${region} --secret-id "$1" --query SecretString --output text; }
 SECRET=$(secret '${secret_id}')
 BROKER_USER=$(printf '%s' "$SECRET" | python3 -c 'import json,sys; print(json.load(sys.stdin)["username"])')
@@ -33,7 +32,7 @@ secret '${cookie_secret_id}' > /data/rabbitmq/.erlang.cookie
 chmod 400 /data/rabbitmq/.erlang.cookie
 chown -R 999:999 /data/rabbitmq # uid do usuário rabbitmq na imagem oficial
 
-# ---- formação do cluster: todos os nós conhecem a lista fixa; o primeiro a subir vira semente
+# cluster: lista fixa de nós
 umask 022
 cat > /etc/rabbitmq-cluster.conf <<'CONF'
 cluster_formation.peer_discovery_backend = classic_config
@@ -44,7 +43,7 @@ cluster_formation.target_cluster_size_hint = ${length(nodes)}
 cluster_partition_handling = pause_minority
 CONF
 
-# rede do host: AMQP, management e as portas do cluster direto na EC2; nomes dos nós → IPs fixos
+
 docker rm -f rabbitmq >/dev/null 2>&1 || true
 docker run -d --name rabbitmq --network host --restart unless-stopped \
 %{ for n in nodes ~}
@@ -55,8 +54,7 @@ docker run -d --name rabbitmq --network host --restart unless-stopped \
   --env-file /etc/rabbitmq.env \
   ${image}
 
-# ---- profundidade das filas no CloudWatch a cada minuto (a autoescala do worker lê daqui).
-# Todos os nós publicam o mesmo número (a fila é do cluster): se um cair, os outros continuam.
+# profundidade das filas no CloudWatch a cada minuto (autoescala)
 cat > /usr/local/bin/rabbitmq-metrics <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail

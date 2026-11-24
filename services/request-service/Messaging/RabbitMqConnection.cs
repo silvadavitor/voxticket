@@ -7,7 +7,7 @@ using RequestService.Infrastructure;
 
 namespace RequestService.Messaging;
 
-/// <summary>Conexão com o RabbitMQ / Amazon MQ: retry na subida e reconexão automática depois (R6).</summary>
+/// <summary>Conexão com o RabbitMQ (container local ou cluster na AWS): retry na subida e reconexão automática depois (R6).</summary>
 public sealed class RabbitMqConnection(ILogger<RabbitMqConnection> log)
 {
     readonly string _exchange = EnvironmentVariables.Required("BROKER_EXCHANGE");

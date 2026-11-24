@@ -43,7 +43,7 @@ Schemas em [`contracts/schemas/`](../../contracts/schemas/). Não altere um cont
 | Variável | Exemplo local |
 |---|---|
 | `SERVICE_NAME` | `quota-service` |
-| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqps://<host>:5671`, sem credenciais) |
+| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqp://<NLB do cluster>:5672`, sem credenciais: elas vêm do Secrets Manager) |
 | `BROKER_USERNAME` / `BROKER_PASSWORD` | vazios local (credenciais já na URL); na AWS vêm do Secrets Manager e **têm precedência** sobre a URL |
 | `BROKER_EXCHANGE` | `events` |
 | `BROKER_QUEUE` | `quota-service.q` |

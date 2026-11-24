@@ -1,8 +1,4 @@
-// VoxTicket: página estática que só conversa com a API (contrato em contracts/openapi.yaml).
-//   /api/audios*  → request-service   (pedidos e estado da saga)
-//   /api/tickets* → ticket-service    (chamados)
-//   /api/tenants* → quota-service     (clientes e créditos)
-// Configuração em config.js, gerado pelo Terraform no deploy.
+// Front estático: só conversa com a API (contracts/openapi.yaml). config.js vem do Terraform.
 
 const CONFIG = Object.assign(
   { apiBase: "/api", grafanaUrl: "http://localhost:3000", rabbitUrl: "http://localhost:15672" },
@@ -82,9 +78,7 @@ function checkAll() {
 
 // ---------------------------------------------------------------- pedidos
 
-// ---------------------------------------------------------------- tracing (W3C traceparent)
-// O front inicia o trace de cada envio: gateway, request-service e todos os serviços seguintes
-// continuam o MESMO trace. Guardamos o traceId por pedido para o "Ver trace" abrir o trace exato.
+// ---------------------------------------------------------------- tracing (o trace começa no navegador)
 const traceIds = (() => { try { return JSON.parse(localStorage.getItem("voxticket.traces")) || {}; } catch { return {}; } })();
 const hex = (bytes) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, "0")).join("");
 function newTraceparent() {
@@ -98,7 +92,6 @@ function rememberTrace(requestId, traceId) {
 
 function traceUrl(id) {
   const traceId = traceIds[id];
-  // com o traceId abre direto o trace (cascata); sem ele (pedido de outro navegador) busca pelo requestId
   const query = traceId || `{span.messaging.message.conversation_id="${id}"}`;
   const pane = {
     a: {
@@ -140,14 +133,38 @@ function renderRequest(req) {
   if (req.ticketId) d.push(`<span>Chamado: <b>${esc(req.ticketId)}</b></span>`);
   if (req.failureReason) d.push(`<span class="comp">${esc(req.failureReason)}</span>`);
   el.querySelector(".details").innerHTML = d.join("");
+  showTranscript(el, req);
   return el;
+}
+
+// ---------------------------------------------------------------- transcrição (o que foi dito no áudio)
+const transcripts = new Map();
+const loadingTranscripts = new Set();
+const HAS_TRANSCRIPT = new Set(["CATEGORIZING", "TICKET_REQUESTED", "TICKET_OPENED"]);
+
+function showTranscript(el, req) {
+  let box = el.querySelector(".transcript");
+  if (!HAS_TRANSCRIPT.has(req.status)) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("p");
+    box.className = "transcript";
+    el.querySelector(".details").after(box);
+  }
+  const id = req.requestId;
+  if (transcripts.has(id)) { box.textContent = `“${transcripts.get(id)}”`; return; }
+  box.textContent = "Carregando a transcrição…";
+  if (loadingTranscripts.has(id)) return;
+  loadingTranscripts.add(id);
+  api(`/audios/${id}/transcript`)
+    .then((t) => { transcripts.set(id, t.text || ""); box.textContent = `“${t.text || ""}”`; })
+    .catch(() => { /* tenta de novo no próximo refresh */ })
+    .finally(() => loadingTranscripts.delete(id));
 }
 
 async function refreshRequests() {
   const list = $("#list");
   try {
     const requests = await api("/audios?limit=30");
-    // mantém a ordem da API (mais novo primeiro) reaproveitando os elementos já na tela
     const els = requests.map(renderRequest);
     list.replaceChildren(...els);
     els.forEach((el) => setTimeout(() => el.classList.remove("new"), 500));
@@ -155,7 +172,7 @@ async function refreshRequests() {
     $("#requests-empty").textContent = "Nenhum pedido ainda. Grave ou envie um áudio.";
   } catch {
     $("#requests-empty").hidden = list.children.length > 0;
-    $("#requests-empty").textContent = "request-service fora do ar: suba os serviços (make up).";
+    $("#requests-empty").textContent = "request-service fora do ar: suba os serviços (docker compose up -d --build).";
   }
 }
 
@@ -182,7 +199,7 @@ async function refreshTickets() {
   } catch {
     $("#tickets-table").hidden = true;
     $("#tickets-empty").hidden = false;
-    $("#tickets-empty").textContent = "ticket-service fora do ar: suba os serviços (make up).";
+    $("#tickets-empty").textContent = "ticket-service fora do ar: suba os serviços (docker compose up -d --build).";
   }
 }
 
@@ -223,7 +240,7 @@ async function refreshTenants() {
     if (state.tab !== "clientes") return;
     $("#tenants-table").hidden = true;
     $("#tenants-empty").hidden = false;
-    $("#tenants-empty").textContent = "quota-service fora do ar: suba os serviços (make up).";
+    $("#tenants-empty").textContent = "quota-service fora do ar: suba os serviços (docker compose up -d --build).";
   }
 }
 
@@ -299,7 +316,7 @@ async function send() {
     refreshRequests();
   } catch (e) {
     msg.textContent = e.message.includes("Failed to fetch") || e.message.startsWith("5")
-      ? "request-service fora do ar: suba os serviços (make up)."
+      ? "request-service fora do ar: suba os serviços (docker compose up -d --build)."
       : `Erro: ${e.message}`;
     $("#btn-send").disabled = false;
   }
@@ -332,7 +349,6 @@ async function race() {
   await Promise.all(Array.from({ length: n }, () =>
     postAudio(tenant, silence, "corrida.ogg").then(({ requestId }) => { ids.add(requestId); c.sent++; show(); }).catch(() => {})));
 
-  // acompanha pelo estado da saga até todos terminarem
   const timer = setInterval(async () => {
     try {
       const all = await api(`/audios?tenantId=${encodeURIComponent(tenant)}&limit=200`);

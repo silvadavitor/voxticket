@@ -8,7 +8,7 @@ locals {
   is_ministack = local.env_cfg.locals.is_ministack
 
   project        = "voxticket"
-  name           = "${local.project}-${local.environment}"
+  name           = "${local.project}-${local.environment}${try(local.env_cfg.locals.region_suffix, "")}"
   secrets_prefix = "${local.project}/${local.environment}"
   modules_dir    = "${dirname(get_parent_terragrunt_dir())}/modules"
   repo_root      = dirname(dirname(get_parent_terragrunt_dir()))

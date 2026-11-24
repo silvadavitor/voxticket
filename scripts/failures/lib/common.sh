@@ -11,7 +11,7 @@ RMQ_AUTH="${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}"
 SAMPLE_AUDIO=${SAMPLE_AUDIO:-scripts/failures/lib/tec-urg.mp3}   # técnico e urgente
 ALT_AUDIO=${ALT_AUDIO:-scripts/failures/lib/finan.mp3}            # financeiro
 BUCKET=${S3_BUCKET:-voxticket-local-audios}
-COMPOSE="docker compose --profile apps"
+COMPOSE="docker compose"
 
 # ---------------------------------------------------------------- saída
 PASS=0

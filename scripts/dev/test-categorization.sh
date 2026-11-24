@@ -3,7 +3,7 @@
 #   1. caminho feliz: transcrição no S3 → CategorizationRequested → AudioCategorized na fila do request-service
 #   2. mesma mensagem 5x (F3): um efeito só
 #   3. payload inválido (F4): 3 reentregas e DLQ; a fila principal segue vazia
-# Pré-requisito: make svc s=categorization-service
+# Pré-requisito: docker compose up -d --build categorization-service
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ -f .env ]] && set -a && source .env && set +a

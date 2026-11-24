@@ -24,8 +24,7 @@ locals {
       alb_path_patterns = []
       desired_count     = 2           # orquestrador sem ponto único de falha
       s3_access         = "readwrite" # upload do áudio e move para failed/
-      # orquestrador: nunca menos de 2 réplicas
-      autoscaling = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 20 }
+      autoscaling       = { min = 2, max = 4, queue = "request-service.q", backlog_per_task = 20 }
       environment = {
         SAGA_TIMEOUT_MS = get_env("SAGA_TIMEOUT_MS", "60000")
       }
@@ -46,7 +45,6 @@ locals {
       # Whisper (modelo base, int8) precisa de mais CPU e ~1 GB de RAM
       cpu    = 1024
       memory = 2048
-      # bônus: autoescala pelo backlog da fila (mínimo 2 mantém o R4)
       autoscaling = {
         min              = 2
         max              = 6

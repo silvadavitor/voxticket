@@ -41,7 +41,7 @@ Schemas em [`contracts/schemas/`](../../contracts/schemas/). Não altere um cont
 | Variável | Exemplo local |
 |---|---|
 | `SERVICE_NAME` | `categorization-service` |
-| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqps://<host>:5671`, sem credenciais) |
+| `BROKER_URL` | `amqp://guest:guest@rabbitmq:5672/` (AWS: `amqp://<NLB do cluster>:5672`, sem credenciais: elas vêm do Secrets Manager) |
 | `BROKER_USERNAME` / `BROKER_PASSWORD` | vazios local (credenciais já na URL); na AWS vêm do Secrets Manager e **têm precedência** sobre a URL |
 | `BROKER_EXCHANGE` | `events` |
 | `BROKER_QUEUE` | `categorization-service.q` |
@@ -83,7 +83,7 @@ go test ./...
 docker run --rm -v "$PWD":/src -w /src golang:1.27.3-alpine go test ./...
 
 # no compose, com as dependências (MiniStack, RabbitMQ, Postgres próprio)
-make svc s=categorization-service
+docker compose up -d --build categorization-service
 curl localhost:8083/health
 
 # teste de integração: caminho feliz, duplicada 5x (F3), payload inválido → DLQ (F4)

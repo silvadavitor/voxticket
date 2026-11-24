@@ -4,17 +4,32 @@
 
 | | local | aws |
 |---|---|---|
-| Infra | `make up` (o `infra-init` roda Terragrunt em `infra/live/ministack`) | GitHub Actions: `infra-up` / `deploy` / `infra-destroy` |
+| Infra | `docker compose up -d --build` (o `infra-init` roda Terragrunt em `infra/live/ministack`) | GitHub Actions: `infra-up` / `deploy` / `infra-destroy` |
 | Serviços | containers do compose | ECS Fargate (imagens no ECR) |
-| Broker | container RabbitMQ | Amazon MQ |
+| Broker | container RabbitMQ | cluster RabbitMQ em 3 EC2 (NLB interno) |
 | Banco | 1 container Postgres por serviço | RDS (database + usuário por serviço) |
 
 Passo a passo do deploy AWS: [`infra/README.md`](../infra/README.md).
 
+## Se a região da AWS cair
+
+A infraestrutura não tem nada fixo de região: AMI do RabbitMQ, zonas e endpoints vêm de parâmetro. Para subir
+em outra região:
+
+```bash
+AWS_REGION=us-west-2 make aws-up     # ou o workflow infra-up com a variável AWS_REGION do repositório
+```
+
+- Fora da região principal (`primary_region` em `infra/live/aws/env.hcl`), os nomes globais ganham o sufixo
+  da região (`voxticket-aws-us-west-2`, bucket de estado próprio), então nada colide com o que ficou na principal.
+- O OIDC do GitHub e o alerta de orçamento são da conta, não da região: já existem e são reaproveitados.
+- **O que não está pronto:** os dados. Áudios (S3) e bancos (RDS) não são replicados entre regiões; a nova
+  região sobe vazia. Próximo passo: replicação entre regiões no S3 e cópia automática de snapshots do RDS.
+
 ## Runbook da apresentação
 
 1. `docker compose ps`: todos `healthy`.
-2. Abrir: painel do RabbitMQ, Grafana (`make grafana`: dashboard da saga, traces e logs) e um terminal com `psql`.
+2. Abrir: painel do RabbitMQ, Grafana (http://localhost:3000: dashboards Saga, Serviços, Logs e Traces) e um terminal com `psql`.
 3. O professor escolhe o cenário: `scripts/failures/F<n>.sh`, depois as consultas de
    `scripts/failures/sql/F<n>.sql`.
 

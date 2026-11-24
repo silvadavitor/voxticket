@@ -19,7 +19,7 @@ Cada unit é desenvolvida e testada de forma independente, contra os contratos e
 
 ## Como testar um serviço sozinho
 
-Suba o seu serviço (`docker compose --profile apps up -d <servico>`, que traz junto o Postgres dele, o
+Suba o seu serviço (`docker compose up -d <servico>`, que traz junto o Postgres dele, o
 RabbitMQ e o MiniStack) e publique
 eventos de teste no RabbitMQ (painel em `:15672`, ou `scripts/failures/lib/publish.py`).
 

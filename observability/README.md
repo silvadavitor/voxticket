@@ -14,9 +14,9 @@ RabbitMQ (API de management) ── receiver rabbitmq ──┘                 
 | Logs | Loki | Explore → Loki → `{service_name="quota-service"}`; o `trace_id` do log leva direto ao trace |
 
 ```bash
-make up          # sobe tudo (inclui collector e lgtm)
+docker compose up -d --build          # sobe tudo (inclui collector e lgtm)
 make otel-test   # manda telemetria sintética: valida o pipeline mesmo sem serviço pronto
-make grafana     # abre o dashboard
+# Grafana: http://localhost:3000 (dashboards Saga, Serviços, Logs e Traces)
 ```
 
 O dashboard já mostra a profundidade de cada fila e DLQ (lida direto do RabbitMQ), sem código nenhum
