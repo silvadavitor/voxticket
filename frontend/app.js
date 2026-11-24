@@ -153,10 +153,19 @@ function showTranscript(el, req) {
   const id = req.requestId;
   if (transcripts.has(id)) { box.textContent = `“${transcripts.get(id)}”`; return; }
   box.textContent = "Carregando a transcrição…";
-  if (loadingTranscripts.has(id)) return;
+  loadTranscript(id);
+}
+
+// busca uma vez por pedido e preenche todo lugar que mostra essa transcrição (Pedidos e Chamados)
+function loadTranscript(id) {
+  if (transcripts.has(id) || loadingTranscripts.has(id)) return;
   loadingTranscripts.add(id);
   api(`/audios/${id}/transcript`)
-    .then((t) => { transcripts.set(id, t.text || ""); box.textContent = `“${t.text || ""}”`; })
+    .then((t) => {
+      transcripts.set(id, t.text || "");
+      document.querySelectorAll(`#r-${CSS.escape(id)} .transcript, [data-transcript="${CSS.escape(id)}"]`)
+        .forEach((p) => { p.textContent = `“${t.text || ""}”`; });
+    })
     .catch(() => { /* tenta de novo no próximo refresh */ })
     .finally(() => loadingTranscripts.delete(id));
 }
@@ -191,7 +200,12 @@ async function refreshTickets() {
         <td>${t.priority ? `<span class="chip ${PRIORITY[t.priority] || "chip-wait"}">${esc(t.priority)}</span>` : "—"}</td>
         <td>${fmtTime(t.createdAt)}</td>
         <td><a href="${traceUrl(t.requestId)}" target="_blank" rel="noopener"><code>${esc(t.requestId).slice(0, 8)}…</code></a></td>
+      </tr>
+      <tr class="transcript-row">
+        <td colspan="6"><p class="transcript" data-transcript="${esc(t.requestId)}">${
+          transcripts.has(t.requestId) ? `“${esc(transcripts.get(t.requestId))}”` : "Carregando a transcrição…"}</p></td>
       </tr>`).join("");
+    tickets.forEach((t) => loadTranscript(t.requestId));
     $("#tickets-table").hidden = tickets.length === 0;
     $("#tickets-empty").hidden = tickets.length > 0;
     $("#tickets-empty").textContent = "Nenhum chamado ainda.";
