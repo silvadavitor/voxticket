@@ -156,7 +156,11 @@ func (o *Outbox) relayBatch(ctx context.Context, database *db.DB, ch *amqp.Chann
 		if _, err := tx.Exec(ctx, `UPDATE outbox SET sent_at = now() WHERE id = $1`, r.id); err != nil {
 			return err
 		}
-		log.Info("evento publicado", "type", r.typ, "correlationId", r.correlationID)
+		lctx := ctx
+		if r.traceparent != nil {
+			lctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier{"traceparent": *r.traceparent})
+		}
+		log.InfoContext(lctx, "evento publicado", "type", r.typ, "correlationId", r.correlationID)
 	}
 
 	var pending int64

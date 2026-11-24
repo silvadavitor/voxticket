@@ -112,7 +112,7 @@ func (c *Consumer) process(ctx context.Context, d amqp.Delivery) {
 
 	handler, ok := c.Handlers[env.Type]
 	if !ok {
-		log.Info("tipo sem handler neste serviço, ignorado")
+		log.InfoContext(ctx, "tipo sem handler neste serviço, ignorado")
 		_ = d.Ack(false)
 		return
 	}
@@ -123,20 +123,20 @@ func (c *Consumer) process(ctx context.Context, d amqp.Delivery) {
 		switch {
 		case err == nil:
 			if duplicate {
-				log.Info("duplicate, skipped")
+				log.InfoContext(ctx, "duplicate, skipped")
 			}
 			_ = d.Ack(false) // só depois do COMMIT
-			log.Info("mensagem processada")
+			log.InfoContext(ctx, "mensagem processada")
 			return
 		case errors.Is(err, envelope.ErrInvalid):
-			log.Error("payload inválido no handler, nack", "erro", err)
+			log.ErrorContext(ctx, "payload inválido no handler, nack", "erro", err)
 			span.SetStatus(codes.Error, err.Error())
 			_ = d.Nack(false, true)
 			return
 		case ctx.Err() != nil:
 			return // desligando: sem ACK, a mensagem volta para a fila
 		default:
-			log.Warn("infraestrutura indisponível, tentando de novo", "em", delay.String(), "erro", err)
+			log.WarnContext(ctx, "infraestrutura indisponível, tentando de novo", "em", delay.String(), "erro", err)
 			span.AddEvent("retry", trace.WithAttributes(attribute.String("erro", err.Error())))
 			select {
 			case <-ctx.Done():

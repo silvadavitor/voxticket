@@ -60,7 +60,7 @@ func (h *Categorization) OnCategorizationRequested(ctx context.Context, tx pgx.T
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		h.Log.Info("pedido já categorizado, nada a publicar", "correlationId", env.CorrelationID)
+		h.Log.InfoContext(ctx, "pedido já categorizado, nada a publicar", "correlationId", env.CorrelationID)
 		return nil
 	}
 
@@ -72,7 +72,7 @@ func (h *Categorization) OnCategorizationRequested(ctx context.Context, tx pgx.T
 	}); err != nil {
 		return err
 	}
-	h.Log.Info("categorizado", "correlationId", env.CorrelationID,
+	h.Log.InfoContext(ctx, "categorizado", "correlationId", env.CorrelationID,
 		"category", r.Category, "priority", r.Priority, "confidence", r.Confidence)
 	return nil
 }

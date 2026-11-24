@@ -76,6 +76,77 @@ make test        # infraestrutura: fmt, validate e testes dos módulos Terraform
 Cada cenário mostra o estado no banco antes e depois, acompanha a saga ao vivo e lista os logs dos
 containers. Detalhes em [scripts/failures/README.md](scripts/failures/README.md).
 
+## Infraestrutura como código
+
+Localmente, o bucket de áudios, o bucket do front e os segredos são criados pelo **mesmo Terraform da AWS**,
+aplicado pelo Terragrunt de [infra/live/ministack](infra/live/ministack/) contra o MiniStack. É o container
+`infra-init` que faz isso no `docker compose up`. Nenhum recurso é criado à mão.
+
+```bash
+docker compose logs infra-init                      # o apply que rodou no up
+docker compose run --rm --no-deps infra-init 'terragrunt run --all --non-interactive plan'
+docker compose run --rm --no-deps infra-init 'terragrunt run --all --non-interactive apply'
+curl -s localhost:4566/ | grep -o '<Name>[^<]*'     # buckets criados no MiniStack
+make test                                           # fmt, validate e testes dos módulos
+```
+
+Para mostrar o Terraform corrigindo o ambiente:
+
+1. Reinicie o MiniStack com `docker compose restart ministack`. Ele não guarda os segredos.
+2. Rode o `plan`. Ele mostra os segredos que faltam (`16 to add`).
+3. Rode o `apply`. Os segredos são recriados.
+4. Rode o `plan` de novo. Ele mostra **No changes**.
+
+Na AWS, os mesmos módulos de [infra/modules](infra/modules/) são aplicados por
+[infra/live/aws](infra/live/aws/), que cria rede, RDS, cluster do RabbitMQ, ECS, ALB, CloudFront, alarmes e
+orçamento. Todo PR roda o **infra-plan** no GitHub Actions e mostra o plano.
+
+## Autoescala
+
+**Localmente** a escala é manual: o RabbitMQ divide a fila entre quantas réplicas estiverem consumindo.
+
+1. Deixe uma réplica só do worker:
+   ```bash
+   docker compose up -d --scale transcription-worker=1 transcription-worker
+   ```
+2. Mande 10 áudios. A fila `transcription-worker.q` cresce no RabbitMQ e no Grafana:
+   ```bash
+   for i in $(seq 10); do curl -s -o /dev/null -F tenantId=tenant-demo -F file=@scripts/failures/lib/tec-urg.mp3 localhost:8088/api/audios; done
+   ```
+3. Volte para 3 réplicas. Aparecem 3 consumidores e a fila esvazia mais rápido:
+   ```bash
+   docker compose up -d --scale transcription-worker=3 transcription-worker
+   ```
+
+O painel **Réplicas consumindo cada fila**, no Grafana, mostra a mudança. O `make f8` faz o mesmo com 30 áudios e
+confere que nenhum foi processado duas vezes. Localmente o máximo é 3 réplicas, porque cada uma usa uma porta
+(8090–8092).
+
+**Na AWS** a mesma ideia é automática, configurada em
+[infra/live/aws/ecs-services](infra/live/aws/ecs-services/terragrunt.hcl). Ela não foi demonstrada porque o
+ambiente da AWS não ficou ligado.
+
+1. Um timer em cada EC2 do RabbitMQ publica, a cada 60 s, o tamanho de cada fila no CloudWatch
+   (`VoxTicket/RabbitMQ`, métrica `MessageCount`).
+2. O Application Auto Scaling divide esse número pela quantidade de tasks e mantém o resultado perto do alvo.
+   No worker o alvo é 5 mensagens por task. Com 30 áudios na fila, ele sobe para 6 tasks, o máximo.
+3. Quando a fila esvazia, ele volta ao mínimo devagar (2 minutos de espera), para não ficar subindo e descendo.
+4. Uma segunda regra olha a CPU (alvo de 70% no worker). Vence a que pedir mais tasks.
+
+| Serviço | Tasks (mín–máx) | Alvo de mensagens por task |
+|---|---|---|
+| transcription-worker | 2–6 | 5 (+ CPU 70%) |
+| request-service | 2–4 | 20 |
+| quota, categorization, ticket | 1–3 | 20 |
+| notification | 1–2 | 50 |
+
+Alguns serviços rodam com uma réplica só, pensando em custo num cenário real: cada task no Fargate é paga por hora.
+Se um deles cair, as mensagens esperam na fila durável, o ECS sobe outra task e o prazo da saga compensa o que
+vencer. O request-service (porta de entrada e orquestrador) e o worker (o passo lento) nunca ficam com menos de 2.
+
+Escalar pela fila, e não só pela CPU, é o que importa aqui: a CPU só diz que as tasks estão ocupadas, e a fila diz
+quanto trabalho está esperando. Com 30 mensagens paradas, a fila pede mais tasks antes da CPU perceber.
+
 ## Mapa do repositório
 
 ```

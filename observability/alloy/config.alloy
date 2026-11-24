@@ -19,6 +19,13 @@ discovery.relabel "containers" {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service_name"
   }
+  // o nginx aparece no trace como "gateway": mesmo nome nos logs para o "Related logs" achar
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "frontend"
+    target_label  = "service_name"
+    replacement   = "gateway"
+  }
   // container (distingue as 3 réplicas do worker)
   rule {
     source_labels = ["__meta_docker_container_name"]
@@ -38,7 +45,11 @@ loki.source.docker "containers" {
 // Extrai o nível do log JSON (Go/Python: "level"; .NET: "LogLevel") e normaliza para info/warn/error
 loki.process "niveis" {
   stage.json {
-    expressions = { level = "level || LogLevel || severity", correlation_id = "correlationId" }
+    expressions = { level = "level || LogLevel || severity", correlation_id = "correlationId", trace_id = "trace_id || TraceId" }
+  }
+  // access log do nginx: trace_id=<32 hex> no fim da linha
+  stage.regex {
+    expression = "trace_id=(?P<trace_id>[0-9a-f]{32})"
   }
   stage.template {
     source   = "level"
@@ -48,7 +59,7 @@ loki.process "niveis" {
     values = { level = "" }
   }
   stage.structured_metadata {
-    values = { correlation_id = "" }
+    values = { correlation_id = "", trace_id = "" }
   }
   forward_to = [loki.write.lgtm.receiver]
 }

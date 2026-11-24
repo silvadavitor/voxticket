@@ -51,6 +51,8 @@ h2 { font-size: 1.25rem; margin-bottom: .9rem; }
 .topbar-right { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 
 /* ---------- layout ---------- */
+[hidden] { display: none !important; } /* senão o display: grid das abas ignora o hidden */
+
 .layout {
   display: grid; gap: 1.4rem; padding: 1.6rem 2rem;
   grid-template-columns: minmax(300px, 380px) 1fr;
