@@ -34,6 +34,21 @@ public sealed class AudioStorage
             AutoCloseStream = false,
         }, ct);
 
+    /// <summary>Lê um objeto de texto (a transcrição). Null se não existe.</summary>
+    public async Task<string?> ReadTextAsync(string key, CancellationToken ct)
+    {
+        try
+        {
+            using var response = await _s3.GetObjectAsync(_bucket, key, ct);
+            using var reader = new StreamReader(response.ResponseStream);
+            return await reader.ReadToEndAsync(ct);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Copia para failed/ e apaga o original. Idempotente: se já foi movido, não faz nada.</summary>
     public async Task MoveToFailedAsync(string key, CancellationToken ct)
     {

@@ -15,6 +15,34 @@ public static partial class AudioEndpoints
         app.MapPost("/audios", ReceiveAudioAsync).DisableAntiforgery();
         app.MapGet("/audios", ListAsync);
         app.MapGet("/audios/{id:guid}", GetStatusAsync);
+        app.MapGet("/audios/{id:guid}/transcript", GetTranscriptAsync);
+    }
+
+    /// <summary>O texto transcrito, lido do S3 pela chave que chegou no AudioTranscribed. 404 enquanto não existe.</summary>
+    static async Task<IResult> GetTranscriptAsync(Guid id, Database database, AudioRequestRepository requests,
+        AudioStorage storage, ILogger<AudioRequest> log, CancellationToken ct)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        var request = await requests.FindAsync(connection, id);
+        if (request?.TranscriptKey is null) return Results.NotFound();
+        try
+        {
+            var json = await storage.ReadTextAsync(request.TranscriptKey, ct);
+            if (json is null) return Results.NotFound();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            return Results.Ok(new
+            {
+                requestId = id,
+                text = root.TryGetProperty("text", out var text) ? text.GetString() : null,
+                language = root.TryGetProperty("language", out var language) ? language.GetString() : null,
+            });
+        }
+        catch (Exception ex) when (TransientErrors.IsTransient(ex))
+        {
+            log.LogWarning("GET transcript unavailable: {error}", ex.Message);
+            return Results.Json(new { error = "armazenamento indisponível, tente de novo" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     /// <summary>

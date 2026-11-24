@@ -133,7 +133,32 @@ function renderRequest(req) {
   if (req.ticketId) d.push(`<span>Chamado: <b>${esc(req.ticketId)}</b></span>`);
   if (req.failureReason) d.push(`<span class="comp">${esc(req.failureReason)}</span>`);
   el.querySelector(".details").innerHTML = d.join("");
+  showTranscript(el, req);
   return el;
+}
+
+// ---------------------------------------------------------------- transcrição (o que foi dito no áudio)
+const transcripts = new Map();
+const loadingTranscripts = new Set();
+const HAS_TRANSCRIPT = new Set(["CATEGORIZING", "TICKET_REQUESTED", "TICKET_OPENED"]);
+
+function showTranscript(el, req) {
+  let box = el.querySelector(".transcript");
+  if (!HAS_TRANSCRIPT.has(req.status)) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("p");
+    box.className = "transcript";
+    el.querySelector(".details").after(box);
+  }
+  const id = req.requestId;
+  if (transcripts.has(id)) { box.textContent = `“${transcripts.get(id)}”`; return; }
+  box.textContent = "Carregando a transcrição…";
+  if (loadingTranscripts.has(id)) return;
+  loadingTranscripts.add(id);
+  api(`/audios/${id}/transcript`)
+    .then((t) => { transcripts.set(id, t.text || ""); box.textContent = `“${t.text || ""}”`; })
+    .catch(() => { /* tenta de novo no próximo refresh */ })
+    .finally(() => loadingTranscripts.delete(id));
 }
 
 async function refreshRequests() {
