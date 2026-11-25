@@ -165,47 +165,6 @@
       }
     },
     {
-      "type": "table",
-      "title": "Com erro",
-      "description": "Vazio = nenhum erro",
-      "datasource": {
-        "type": "tempo",
-        "uid": "tempo"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "tempo",
-            "uid": "tempo"
-          },
-          "queryType": "traceql",
-          "query": "{status = error}",
-          "limit": 20,
-          "tableType": "traces"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "sortBy": [
-          {
-            "displayName": "Start time",
-            "desc": true
-          }
-        ]
-      },
-      "id": 5,
-      "gridPos": {
-        "x": 0,
-        "y": 27,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
       "type": "heatmap",
       "title": "Distribuição de latência (todas as operações)",
       "datasource": {
@@ -240,9 +199,9 @@
       },
       "id": 6,
       "gridPos": {
-        "x": 12,
+        "x": 0,
         "y": 27,
-        "w": 12,
+        "w": 24,
         "h": 8
       }
     }
