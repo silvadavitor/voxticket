@@ -282,7 +282,7 @@ services:
       args:
         WHISPER_MODEL: ${WHISPER_MODEL:-base} # embutido na imagem
     ports:
-      - "8090-8092:8080" # 1 porta por réplica
+      - "8090-8099:8080" # 1 porta por réplica: escala até 10 (--scale transcription-worker=N)
     deploy:
       replicas: 3 # R4 / F8
       # o Whisper usa todos os núcleos; limitado para a máquina não travar

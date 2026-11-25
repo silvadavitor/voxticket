@@ -52,7 +52,7 @@ docker compose down -v                 # para tudo e apaga os dados
 | http://localhost:8088/api | API pelo gateway (`/audios`, `/tickets`, `/tenants`) | — |
 | http://localhost:3000 | Grafana: dashboards Saga, Serviços, Logs e Traces | sem login |
 | http://localhost:15672 | Painel do RabbitMQ (filas, DLQs, consumidores) | guest / guest |
-| `localhost:8085`, `8086` · `8081`–`8084` · `8090`–`8092` | `/health` do request (2 réplicas), quota, ticket, categorization, notification e workers | — |
+| `localhost:8085`, `8086` · `8081`–`8084` · `8090`–`8099` | `/health` do request (2 réplicas), quota, ticket, categorization, notification e workers | — |
 | `localhost:5433`–`5438` | Postgres de cada serviço | `<db>_user` / senha do `.env` |
 
 Enviar um áudio pela linha de comando:
@@ -119,8 +119,8 @@ orçamento. Todo PR roda o **infra-plan** no GitHub Actions e mostra o plano.
    ```
 
 O painel **Réplicas consumindo cada fila**, no Grafana, mostra a mudança. O `make f8` faz o mesmo com 30 áudios e
-confere que nenhum foi processado duas vezes. Localmente o máximo é 3 réplicas, porque cada uma usa uma porta
-(8090–8092).
+confere que nenhum foi processado duas vezes. Localmente o máximo é 10 réplicas, porque cada uma usa uma porta
+(8090–8099). Cada réplica carrega o seu próprio modelo do Whisper na memória.
 
 **Na AWS** a mesma ideia é automática, configurada em
 [infra/live/aws/ecs-services](infra/live/aws/ecs-services/terragrunt.hcl). Ela não foi demonstrada porque o

@@ -15,6 +15,7 @@ locals {
     png  = "image/png"
     ico  = "image/x-icon"
     txt  = "text/plain; charset=utf-8"
+    mp3  = "audio/mpeg"
   }
   # configuração em tempo de deploy (o app.js lê window.VOXTICKET_CONFIG)
   config_js = "window.VOXTICKET_CONFIG = ${jsonencode(var.app_config)};\n"

@@ -31,49 +31,35 @@ async function api(path, options = {}) {
   return r.status === 204 ? null : r.json();
 }
 
-async function checkService(path, chipId, name) {
-  const chip = $(chipId);
+// /health de cada serviço. O gateway local repassa /api/health/<servico> (frontend/nginx.conf); o do
+// request-service é o /api/health. Nas réplicas (worker), cada chamada cai numa delas.
+const SERVICES = [
+  ["request-service", "request"],
+  ["quota-service", "quota"],
+  ["transcription-worker", "transcription"],
+  ["categorization-service", "categorization"],
+  ["ticket-service", "ticket"],
+  ["notification-service", "notification"],
+];
+
+async function checkService(service, name) {
+  const chip = $(`#svc-${service}`);
+  const path = service === "request-service" ? "/health" : `/health/${service}`;
   try {
     const h = await api(path);
     const deps = [h.db === "down" && "banco fora", h.broker === "down" && "broker fora"].filter(Boolean);
     chip.textContent = deps.length ? `${name}: ${deps.join(", ")}` : `${name} online`;
     chip.className = `chip ${deps.length ? "chip-warn" : "chip-ok"}`;
-    return true;
-  } catch {
+    chip.title = `${service}: ${JSON.stringify(h)}`;
+  } catch (e) {
     chip.textContent = `${name} offline`;
     chip.className = "chip chip-bad";
-    return false;
-  }
-}
-
-async function checkTicketService() {
-  const chip = $("#svc-ticket");
-  try {
-    await api("/tickets?limit=1");
-    chip.textContent = "ticket-service online";
-    chip.className = "chip chip-ok";
-  } catch {
-    chip.textContent = "ticket-service offline";
-    chip.className = "chip chip-bad";
-  }
-}
-
-async function checkQuotaService() {
-  const chip = $("#svc-quota");
-  try {
-    await api("/tenants");
-    chip.textContent = "quota-service online";
-    chip.className = "chip chip-ok";
-  } catch {
-    chip.textContent = "quota-service offline";
-    chip.className = "chip chip-bad";
+    chip.title = `${service}: ${e.message}`;
   }
 }
 
 function checkAll() {
-  checkService("/health", "#svc-request", "request-service");
-  checkTicketService();
-  checkQuotaService();
+  SERVICES.forEach(([service, name]) => checkService(service, name));
 }
 
 // ---------------------------------------------------------------- pedidos
@@ -358,10 +344,20 @@ async function race() {
     $("#btn-race").disabled = false;
     return;
   }
-  const silence = new Blob([new Uint8Array(1024)], { type: "audio/ogg" });
+  // áudio real (fala em português): o worker transcreve com Whisper, bytes aleatórios falhariam na transcrição
+  let sample;
+  try {
+    const res = await fetch("amostra.mp3");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    sample = await res.blob();
+  } catch (e) {
+    $("#race-msg").textContent = `Erro ao carregar o áudio de amostra: ${e.message}`;
+    $("#btn-race").disabled = false;
+    return;
+  }
 
   await Promise.all(Array.from({ length: n }, () =>
-    postAudio(tenant, silence, "corrida.ogg").then(({ requestId }) => { ids.add(requestId); c.sent++; show(); }).catch(() => {})));
+    postAudio(tenant, sample, "corrida.mp3").then(({ requestId }) => { ids.add(requestId); c.sent++; show(); }).catch(() => {})));
 
   const timer = setInterval(async () => {
     try {
