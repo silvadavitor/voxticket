@@ -32,11 +32,14 @@ func Setup(ctx context.Context, serviceName string) (*slog.Logger, func(context.
 		return slog.New(withTraceIDs{stdout}).With("service", serviceName), func(context.Context) error { return nil }
 	}
 
+	// service.instance.id = hostname do container: com mais de uma réplica, sem ele as métricas de todas viram
+	// uma série só no Prometheus e o contador "volta" a cada envio (increase() conta como reset)
+	instance, _ := os.Hostname()
 	res, _ := resource.New(ctx,
 		resource.WithFromEnv(), // OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES
 		resource.WithHost(),
 		resource.WithTelemetrySDK(),
-		resource.WithAttributes(semconv.ServiceName(serviceName)),
+		resource.WithAttributes(semconv.ServiceName(serviceName), semconv.ServiceInstanceID(instance)),
 	)
 
 	var shutdowns []func(context.Context) error

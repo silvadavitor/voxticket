@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging.Console;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using RequestService.Configuration;
 using RequestService.Messaging;
@@ -56,7 +57,13 @@ public static class ServiceRegistration
     static void AddTelemetry(this IServiceCollection services)
     {
         if (!Tracing.IsExportEnabled) return;
+        // service.instance.id = hostname do container: sem ele as réplicas viram uma série só no Prometheus e o
+        // contador "volta" a cada scrape (increase() conta isso como reset e soma de novo)
         services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddAttributes(new Dictionary<string, object>
+            {
+                ["service.instance.id"] = Environment.MachineName,
+            }))
             .WithTracing(tracing => tracing.AddSource(Tracing.Name).AddAspNetCoreInstrumentation().AddOtlpExporter())
             .WithMetrics(metrics => metrics.AddMeter(Tracing.Name).AddOtlpExporter());
     }

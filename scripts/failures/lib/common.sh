@@ -72,16 +72,34 @@ consumers() { curl -fsS -u "$RMQ_AUTH" "$MGMT/api/queues/%2F/$1" | jq '.consumer
 
 # ---------------------------------------------------------------- utilidades
 uuid() { cat /proc/sys/kernel/random/uuid; }
+ALTERED=()
+restore_altered() {
+  local s
+  for s in "${ALTERED[@]}"; do
+    [[ -n $s ]] || continue
+    printf '\n\033[33m⚠ cenário interrompido: restaurando %s com a configuração normal\033[0m\n' "$s"
+    $COMPOSE up -d --no-deps --force-recreate "$s" >/dev/null 2>&1 || true
+  done
+}
+trap restore_altered EXIT
+
 # recria um serviço com variáveis sobrescritas: recreate transcription-worker VAR=valor ...
 recreate() {
   local svc=$1; shift
+  # com variáveis sobrescritas o serviço fica "alterado" até um recreate sem variáveis; se o cenário morrer
+  # antes disso, o trap de saída restaura (senão o worker fica, por exemplo, com falha 100% para sempre)
+  if (( $# )); then [[ " ${ALTERED[*]} " == *" $svc "* ]] || ALTERED+=("$svc")
+  else ALTERED=("${ALTERED[@]/$svc}"); fi
   env "$@" $COMPOSE up -d --no-deps --force-recreate "$svc" >/dev/null 2>&1
-  until_ok 90 "curl -fsS localhost:$(port_of "$svc")/health >/dev/null 2>&1"
+  # porta resolvida a cada tentativa: o container recriado pode pegar outra porta da faixa
+  until_ok 90 "curl -fsS localhost:\$(port_of $svc)/health >/dev/null 2>&1"
 }
 port_of() {
   case $1 in
     request-service) echo 8085 ;; quota-service) echo 8081 ;; ticket-service) echo 8082 ;;
-    categorization-service) echo 8083 ;; notification-service) echo 8084 ;; transcription-worker) echo 8090 ;;
+    categorization-service) echo 8083 ;; notification-service) echo 8084 ;;
+    # réplicas usam a faixa 8090-8099 e o Docker escolhe a porta livre: pergunta qual ficou com a 1ª réplica
+    transcription-worker) $COMPOSE port --index 1 transcription-worker 8080 2>/dev/null | sed 's/.*://' ;;
   esac
 }
 health() { curl -fsS --max-time 3 "localhost:$(port_of "$1")/health" 2>/dev/null; }

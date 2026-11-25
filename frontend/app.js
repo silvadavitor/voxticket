@@ -195,7 +195,8 @@ async function refreshTickets() {
     $("#tickets-table").hidden = tickets.length === 0;
     $("#tickets-empty").hidden = tickets.length > 0;
     $("#tickets-empty").textContent = "Nenhum chamado ainda.";
-    $("#tickets-count").textContent = tickets.length ? tickets.length : "";
+    // a lista vem limitada a 100: com 100 itens, pode haver mais
+    $("#tickets-count").textContent = tickets.length >= 100 ? "100+" : tickets.length || "";
   } catch {
     $("#tickets-table").hidden = true;
     $("#tickets-empty").hidden = false;

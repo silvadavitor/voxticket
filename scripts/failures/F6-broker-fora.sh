@@ -9,6 +9,7 @@ outbox() { val requests "SELECT count(*) FROM outbox WHERE sent_at IS NULL"; }
 
 step "Derrubando o RabbitMQ (docker compose stop rabbitmq)"
 $COMPOSE stop rabbitmq >/dev/null 2>&1; STOP=$(date +%s)
+trap 'restore_altered; $COMPOSE start rabbitmq >/dev/null 2>&1 || true' EXIT   # se morrer no meio, religa o broker
 say "request-service /health: $(health request-service)"
 
 step "Enviando 5 áudios COM O BROKER FORA"

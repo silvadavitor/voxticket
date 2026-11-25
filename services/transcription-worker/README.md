@@ -107,8 +107,9 @@ combinar. Testado de ponta a ponta em 18/11/2026: 10/10 pedidos transcritos e ca
 ## Rodar e testar
 
 ```bash
-docker compose up -d --build transcription-worker   # 3 réplicas, portas 8090-8092
-curl localhost:8090/health
+docker compose up -d --build transcription-worker   # 3 réplicas, cada uma numa porta livre de 8090-8099
+docker compose port --index 1 transcription-worker 8080   # qual porta a 1ª réplica pegou
+curl localhost:$(docker compose port --index 1 transcription-worker 8080 | cut -d: -f2)/health
 ```
 
 Testes unitários (sem Docker):

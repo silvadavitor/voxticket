@@ -16,6 +16,20 @@ public sealed class RequestSaga : IMessageHandlers
     static readonly TimeSpan TranscriptionTimeout = TimeSpan.FromMilliseconds(EnvironmentVariables.Integer("SAGA_TIMEOUT_MS", 60000));
     static readonly Counter<long> Completed = Tracing.Meter.CreateCounter<long>("voxticket.saga.completed");
     static readonly Counter<long> Compensated = Tracing.Meter.CreateCounter<long>("voxticket.saga.compensated");
+    static readonly string[] KnownReasons = ["TIMEOUT", "TRANSCRIPTION_FAILED", "TICKET_REJECTED"];
+
+    // Cria as séries valendo 0 já no start. Sem isso a série só nasce na 1ª compensação e, se várias vêm
+    // juntas (ex.: 23 timeouts entre dois envios), aparece direto com 23 e o increase() do painel conta 0.
+    static RequestSaga()
+    {
+        Completed.Add(0);
+        foreach (var reason in KnownReasons) Compensated.Add(0, ReasonTag(reason));
+    }
+
+    // Só o código do motivo vira label ("TRANSCRIPTION_FAILED: InvalidDataError..." → "TRANSCRIPTION_FAILED"):
+    // texto livre no label cria uma série nova por mensagem de erro.
+    static KeyValuePair<string, object?> ReasonTag(string reason) =>
+        new("reason", reason.Split(':', 2)[0].Trim() is { Length: > 0 and <= 64 } code ? code : "OTHER");
 
     readonly AudioRequestRepository _requests;
     readonly OutboxWriter _outbox;
@@ -131,7 +145,7 @@ public sealed class RequestSaga : IMessageHandlers
         await TransitionAsync(connection, transaction, request, RequestStatus.Compensating, new RequestChanges(FailureReason: reason));
         await PublishCreditReleaseAsync(connection, transaction, request, reason);
         await PublishRequestFailedAsync(connection, transaction, request, RequestStatus.Failed, reason);
-        Compensated.Add(1, new KeyValuePair<string, object?>("reason", reason));
+        Compensated.Add(1, ReasonTag(reason));
     }
 
     /// <summary>Chamado pelo SagaTimeoutWorker depois de marcar o pedido como EXPIRED.</summary>
@@ -140,7 +154,7 @@ public sealed class RequestSaga : IMessageHandlers
         const string reason = "TIMEOUT";
         await PublishCreditReleaseAsync(connection, transaction, request, reason);
         await PublishRequestFailedAsync(connection, transaction, request, RequestStatus.Expired, reason);
-        Compensated.Add(1, new KeyValuePair<string, object?>("reason", reason));
+        Compensated.Add(1, ReasonTag(reason));
     }
 
     async Task<AudioRequest?> LockInStatusAsync(

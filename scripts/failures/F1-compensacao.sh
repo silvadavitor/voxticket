@@ -26,8 +26,9 @@ say "S3 failed/: $(s3_ls failed/ | grep "$ID" | awk '{print $4}')"
 
 step "Resultado"
 check "pedido terminou FAILED"                    '[[ "$(api_status $ID)" == FAILED ]]'
-check "reserva de crédito RELEASED"               '[[ "$(val quota "SELECT status FROM reservations WHERE request_id='"'$ID'"'")" == RELEASED ]]'
-check "crédito devolvido (used voltou a 0)"       '[[ "$(used $T)" == 0 ]]'
+# a devolução é assíncrona (CreditReleaseRequested → quota): pode chegar alguns ms depois do FAILED
+check "reserva de crédito RELEASED"               'until_ok 15 "[[ \$(val quota \"SELECT status FROM reservations WHERE request_id='"'$ID'"'\") == RELEASED ]]"'
+check "crédito devolvido (used voltou a 0)"       'until_ok 15 "[[ \$(used $T) == 0 ]]"'
 check "cliente notificado (REQUEST_FAILED)"       'until_ok 15 "[[ \$(val notification \"SELECT count(*) FROM notifications WHERE request_id='"'$ID'"' AND kind='"'REQUEST_FAILED'"'\") == 1 ]]"'
 check "áudio movido para failed/ no S3"           's3_ls failed/ | grep -q "$ID"'
 

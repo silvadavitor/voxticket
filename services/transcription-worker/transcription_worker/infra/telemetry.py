@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 from typing import Any, Callable, Iterable
 
 from opentelemetry import metrics, propagate, trace
@@ -35,7 +36,11 @@ def setup_telemetry(service: str) -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         # OTEL_SERVICE_NAME e OTEL_RESOURCE_ATTRIBUTES são lidos por Resource.create
-        resource = Resource.create({SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", service)})
+        # service.instance.id = hostname do container: sem ele as 3 réplicas viram uma série só no Prometheus
+        resource = Resource.create({
+            SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", service),
+            "service.instance.id": socket.gethostname(),
+        })
         insecure = endpoint.startswith("http://")
         tp = TracerProvider(resource=resource)
         tp.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=insecure)))
